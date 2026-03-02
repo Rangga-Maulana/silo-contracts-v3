@@ -37,9 +37,6 @@ abstract contract PartialLiquidationByDefaulting is IPartialLiquidationByDefault
     /// @inheritdoc IPartialLiquidationByDefaulting
     address public immutable LIQUIDATION_LOGIC;
 
-    /// @inheritdoc IPartialLiquidationByDefaulting
-    uint256 public constant LT_MARGIN_FOR_DEFAULTING = 0.025e18;
-
     uint256 internal constant _DECIMALS_PRECISION = 1e18;
 
     constructor() {
@@ -57,6 +54,12 @@ abstract contract PartialLiquidationByDefaulting is IPartialLiquidationByDefault
     }
 
     /// @inheritdoc IPartialLiquidationByDefaulting
+    // solhint-disable-next-line func-name-mixedcase
+    function LT_MARGIN_FOR_DEFAULTING() public pure virtual returns (uint256) {
+        return 0.01e18; // 1%
+    }
+
+    /// @inheritdoc IPartialLiquidationByDefaulting
     // solhint-disable-next-line function-max-lines, code-complexity
     function liquidationCallByDefaulting(address _borrower)
         external
@@ -65,6 +68,8 @@ abstract contract PartialLiquidationByDefaulting is IPartialLiquidationByDefault
         onlyAllowedOrPublic
         returns (uint256 withdrawCollateral, uint256 repayDebtAssets)
     {
+        emit LiquidationStart(LiquidationType.DEFAULTING);
+
         ISiloConfig siloConfigCached = siloConfig;
 
         require(address(siloConfigCached) != address(0), EmptySiloConfig());
@@ -74,7 +79,7 @@ abstract contract PartialLiquidationByDefaulting is IPartialLiquidationByDefault
         (ISiloConfig.ConfigData memory collateralConfig, ISiloConfig.ConfigData memory debtConfig) =
             _fetchConfigs(siloConfigCached, _borrower);
 
-        collateralConfig.lt += LT_MARGIN_FOR_DEFAULTING;
+        collateralConfig.lt += LT_MARGIN_FOR_DEFAULTING();
 
         CallParams memory params;
 
@@ -149,6 +154,14 @@ abstract contract PartialLiquidationByDefaulting is IPartialLiquidationByDefault
         // it is possible to deduct 1 wei less from debtTotalAssets than from collateralTotalAssets because of rounding
         (, repayDebtAssets) = _repayDebtByDefaulting(debtConfig.silo, repayDebtAssets, _borrower);
 
+        emit DefaultingLiquidationData({
+            debtSilo: debtConfig.silo,
+            borrower: _borrower,
+            withdrawAssetsFromCollateral: params.withdrawAssetsFromCollateral,
+            withdrawAssetsFromProtected: params.withdrawAssetsFromProtected,
+            repayDebtAssets: repayDebtAssets
+        });
+        
         emit LiquidationCall(msg.sender, debtConfig.silo, _borrower, repayDebtAssets, withdrawCollateral, true);
     }
 
@@ -195,11 +208,11 @@ abstract contract PartialLiquidationByDefaulting is IPartialLiquidationByDefault
 
         // to be consistent with validateSiloInitData, we using `<=` for lt check
         require(
-            config0.lt + LT_MARGIN_FOR_DEFAULTING + config0.liquidationFee <= _DECIMALS_PRECISION, InvalidLTConfig0()
+            config0.lt + LT_MARGIN_FOR_DEFAULTING() + config0.liquidationFee <= _DECIMALS_PRECISION, InvalidLTConfig0()
         );
         
         require(
-            config1.lt + LT_MARGIN_FOR_DEFAULTING + config1.liquidationFee <= _DECIMALS_PRECISION, InvalidLTConfig1()
+            config1.lt + LT_MARGIN_FOR_DEFAULTING() + config1.liquidationFee <= _DECIMALS_PRECISION, InvalidLTConfig1()
         );
     }
 

@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.28;
 
+import {console2} from "forge-std/console2.sol";
 import {IERC20} from "openzeppelin5/token/ERC20/IERC20.sol";
 
 import {ISilo} from "silo-core/contracts/interfaces/ISilo.sol";
 import {IShareToken} from "silo-core/contracts/interfaces/IShareToken.sol";
 import {ISiloIncentivesController} from "silo-core/contracts/incentives/interfaces/ISiloIncentivesController.sol";
+import {IPartialLiquidationByDefaulting} from "silo-core/contracts/interfaces/IPartialLiquidationByDefaulting.sol";
 
 import {SiloConfigsNames} from "silo-core/deploy/silo/SiloDeployments.sol";
 import {SiloLensLib} from "silo-core/contracts/lib/SiloLensLib.sol";
@@ -56,8 +58,6 @@ contract DefaultingLiquidationBorrowable0Test is DefaultingLiquidationCommon {
             uint256 collateralToLiquidate,
             uint256 debtToRepay
         ) = _defaulting_happyPath(_withOtherBorrower);
-
-        assertEq(silo0.getLtv(borrower), 0, "LT config for this market is 97%, so we expect here full liquidation");
 
         (ISilo collateralSilo, ISilo debtSilo) = _getSilos();
 
@@ -138,10 +138,11 @@ contract DefaultingLiquidationBorrowable0Test is DefaultingLiquidationCommon {
                 debtSiloBefore.totalDebt, debtSiloAfter.totalDebt + debtToRepay, "[debtSilo] total debt was canceled"
             );
 
-            assertEq(
-                debtSiloAfter.totalDebt,
-                debtSilo.maxRepay(makeAddr("otherBorrower")),
-                "[debtSilo] total debt is 0 (or just other debt) now, because of full liquidation"
+            assertLe(
+                debtSilo.maxRepay(makeAddr("otherBorrower")) + debtSilo.maxRepay(makeAddr("borrower"))
+                    - debtSiloAfter.totalDebt,
+                1,
+                "[debtSilo] total debt must match borrowers debt (1 is for rounding errors)"
             );
 
             assertEq(
@@ -152,28 +153,25 @@ contract DefaultingLiquidationBorrowable0Test is DefaultingLiquidationCommon {
 
             assertEq(
                 debtSiloAfter.totalDebtShares,
-                debtSilo.maxRepayShares(makeAddr("otherBorrower")),
-                "[debtSilo] total debt shares is 0 (or only other debt shares) now, because of full liquidation"
+                debtSilo.maxRepayShares(makeAddr("otherBorrower")) + debtSilo.maxRepayShares(makeAddr("borrower")),
+                "[debtSilo] total debt shares match borrowers shares"
             );
         }
 
         {
             // borrower checks
 
-            uint256 collateralLiquidated = 0.5e18; // hardcoded based on liquidation
+            uint256 collateralLiquidated = 0.076192719865023158e18; // hardcoded based on liquidation
 
             uint256 protectedLiquidated = collateralToLiquidate - collateralLiquidated;
 
-            assertEq(
-                borrowerCollateralBefore.collateralAssets,
-                collateralLiquidated,
-                "[collateralUser] borrower collateral before liquidation"
-            );
+            console2.log("borrowerCollateralBefore.collateralAssets", borrowerCollateralBefore.collateralAssets);
+            console2.log("borrowerCollateralAfter.collateralAssets", borrowerCollateralAfter.collateralAssets);
 
             assertEq(
-                borrowerCollateralAfter.collateralAssets,
-                0,
-                "[collateralUser] borrower collateral was fully liquidated"
+                borrowerCollateralBefore.collateralAssets,
+                borrowerCollateralAfter.collateralAssets + collateralLiquidated,
+                "[collateralUser] borrower collateral taken"
             );
 
             assertEq(
@@ -186,15 +184,17 @@ contract DefaultingLiquidationBorrowable0Test is DefaultingLiquidationCommon {
                 borrowerCollateralAfter.protectedAssets, 0, "[collateralUser] borrower protected was fully liquidated"
             );
 
-            assertEq(borrowerDebtBefore.debtAssets, debtToRepay, "[debtUser] debt amount canceled");
-
-            assertEq(borrowerDebtAfter.debtAssets, 0, "[debtUser] borrower debt canceled");
+            assertEq(
+                borrowerDebtBefore.debtAssets - debtToRepay,
+                borrowerDebtAfter.debtAssets,
+                "[debtUser] debt amount canceled"
+            );
         }
 
         {
             // lpProvider checks
 
-            uint256 totalGaugeRewards = 0.499512389292466912131e21; // hardcoded based on logs
+            uint256 totalGaugeRewards = 0.076118415092938649398e21; // hardcoded based on logs
 
             uint256 totalProtectedRewards = 0.499512389292466912131e21; // hardcoded based on logs
 
@@ -211,8 +211,8 @@ contract DefaultingLiquidationBorrowable0Test is DefaultingLiquidationCommon {
             address lpProvider = makeAddr("lpProvider");
 
             {
-                uint256 lpProviderCollateralLeft = 0.016553668919408922e18; // hardcoded based on logs
-                if (_withOtherBorrower) lpProviderCollateralLeft += 1.012738993241773239e18;
+                uint256 lpProviderCollateralLeft = 0.427395456080449533e18; // hardcoded based on logs
+                if (_withOtherBorrower) lpProviderCollateralLeft += 1.00077859854738471e18;
 
                 assertEq(
                     _getUserState(debtSilo, lpProvider).collateralAssets,
@@ -287,7 +287,14 @@ contract DefaultingLiquidationBorrowable0Test is DefaultingLiquidationCommon {
             }
 
             //exit from debt silo
+            console2.log("exit from debt silo");
             _assertUserCanExit(debtSilo, makeAddr("protectedUser"));
+
+            // this case is partial liquidation, so we need to repay the debt to exit
+            token0.setOnDemand(true);
+            debtSilo.repayShares(borrowerDebtAfter.debtShares, borrower);
+            token0.setOnDemand(false);
+
             _assertUserCanExit(debtSilo, makeAddr("lpProvider"));
         }
     }
@@ -325,12 +332,12 @@ contract DefaultingLiquidationBorrowable0Test is DefaultingLiquidationCommon {
 
         assertEq(
             borrowerCollateralShareToken.balanceOf(address(gauge2)),
-            999.024778584933824262e18,
+            586.012443093061880274e18,
             "gauge2 should have only collateral rewards from borrower2 liquidation"
         );
         assertEq(
             borrowerCollateralShareToken.balanceOf(makeAddr("keeper2")),
-            0.975221415066175738e18,
+            0.572049759175233726e18,
             "keeper2 fee from borrower2 liquidation"
         );
         assertEq(
@@ -342,12 +349,12 @@ contract DefaultingLiquidationBorrowable0Test is DefaultingLiquidationCommon {
         uint256 gauge2CollateralRewards1 = gauge2.getRewardsBalance(makeAddr("lpProvider1"), programNames[0]);
         uint256 gauge2CollateralRewards2 = gauge2.getRewardsBalance(makeAddr("lpProvider2"), programNames[0]);
 
-        assertEq(gauge2CollateralRewards1, 499.512389292466912131e18, "[lpProvider1] gauge2 has claimable rewards");
-        assertEq(gauge2CollateralRewards2, 499.512389292466912131e18, "[lpProvider2] gauge2 has claimable rewards");
+        assertEq(gauge2CollateralRewards1, 293.006221546530940137e18, "[lpProvider1] gauge2 has claimable rewards");
+        assertEq(gauge2CollateralRewards2, 293.006221546530940137e18, "[lpProvider2] gauge2 has claimable rewards");
 
         assertEq(
             borrowerProtectedShareToken.balanceOf(address(gauge3)),
-            99.902477858493382427e18,
+            58.613056869743082039e18,
             "gauge3 should have only protected rewards"
         );
 
@@ -387,19 +394,19 @@ contract DefaultingLiquidationBorrowable0Test is DefaultingLiquidationCommon {
 
         assertEq(
             borrowerProtectedShareToken.balanceOf(makeAddr("lpProvider1")),
-            49.951238929246691213e18,
+            29.306528434871541019e18,
             "[lpProvider1] gauge3 protected rewards"
         );
 
         assertEq(
             borrowerProtectedShareToken.balanceOf(makeAddr("lpProvider2")),
-            49.951238929246691213e18,
+            29.306528434871541019e18,
             "[lpProvider2] gauge3 protected rewards"
         );
 
         assertEq(
             borrowerProtectedShareToken.balanceOf(makeAddr("keeper3")),
-            0.097522141506617573e18,
+            0.057216507024810961e18,
             "keeper3 fee from borrower3 liquidation (protected)"
         );
     }
@@ -422,12 +429,12 @@ contract DefaultingLiquidationBorrowable0Test is DefaultingLiquidationCommon {
 
         assertEq(
             borrowerCollateralShareToken.balanceOf(address(gauge2)),
-            999.024778584933824262e18,
+            586.057329866587872215e18,
             "gauge2 should have only collateral rewards from borrower2 liquidation"
         );
         assertEq(
             borrowerCollateralShareToken.balanceOf(makeAddr("keeper2")),
-            0.975221415066175738e18,
+            0.572093576449573785e18,
             "keeper2 fee from borrower2 liquidation"
         );
         assertEq(
@@ -439,12 +446,12 @@ contract DefaultingLiquidationBorrowable0Test is DefaultingLiquidationCommon {
         uint256 gauge2CollateralRewards1 = gauge2.getRewardsBalance(makeAddr("lpProvider1"), programNames[0]);
         uint256 gauge2CollateralRewards2 = gauge2.getRewardsBalance(makeAddr("lpProvider2"), programNames[0]);
 
-        assertEq(gauge2CollateralRewards1, 499.512389292466912131e18, "[lpProvider1] gauge2 has claimable rewards");
-        assertEq(gauge2CollateralRewards2, 499.512389292466912131e18, "[lpProvider2] gauge2 has claimable rewards");
+        assertEq(gauge2CollateralRewards1, 293.028664933293936107e18, "[lpProvider1] gauge2 has claimable rewards");
+        assertEq(gauge2CollateralRewards2, 293.028664933293936107e18, "[lpProvider2] gauge2 has claimable rewards");
 
         assertEq(
             borrowerProtectedShareToken.balanceOf(address(gauge3)),
-            99.902477858493382427e18,
+            58.617613983462586049e18,
             "gauge3 should have only protected rewards"
         );
 
@@ -484,21 +491,55 @@ contract DefaultingLiquidationBorrowable0Test is DefaultingLiquidationCommon {
 
         assertEq(
             borrowerProtectedShareToken.balanceOf(makeAddr("lpProvider1")),
-            49.951238929246691213e18,
+            29.308806991731293024e18,
             "[lpProvider1] gauge3 protected rewards"
         );
 
         assertEq(
             borrowerProtectedShareToken.balanceOf(makeAddr("lpProvider2")),
-            49.951238929246691213e18,
+            29.308806991731293024e18,
             "[lpProvider2] gauge3 protected rewards"
         );
 
         assertEq(
             borrowerProtectedShareToken.balanceOf(makeAddr("keeper3")),
-            0.097522141506617573e18,
+            0.057220955558005951e18,
             "keeper3 fee from borrower3 liquidation (protected)"
         );
+    }
+
+    /*
+    FOUNDRY_PROFILE=core_test forge test --ffi --mt test_defaulting_DefaultingLiquidationData -vv --mc DefaultingLiquidationBorrowable0Test
+    */
+    function test_defaulting_DefaultingLiquidationData() public {
+        _addLiquidity(1e18);
+
+        _createPosition({_borrower: borrower, _collateral: 1e18, _protected: 1e18, _maxOut: true});
+
+        _setCollateralPrice(0.98e18);
+
+        _moveUntillDefaultingPossible(borrower, 0.001e18, 1 days);
+
+        (,ISilo debtSilo) = _getSilos();
+
+        // hardcoded based on logs
+        uint256 withdrawAssetsFromCollateral = 1e18;
+        uint256 withdrawAssetsFromProtected = 1e18;
+        uint256 repayDebtAssets = 2.046343284218735174e18;
+
+        vm.expectEmit(true, true, true, true);
+        emit IPartialLiquidationByDefaulting.DefaultingLiquidationData({
+            debtSilo: address(debtSilo),
+            borrower: borrower,
+            withdrawAssetsFromCollateral: withdrawAssetsFromCollateral,
+            withdrawAssetsFromProtected: withdrawAssetsFromProtected,
+            repayDebtAssets: repayDebtAssets
+        });
+            
+        (uint256 collateralToLiquidate, uint256 debtToRepay) = defaulting.liquidationCallByDefaulting(borrower);
+
+        assertEq(collateralToLiquidate, withdrawAssetsFromCollateral + withdrawAssetsFromProtected, "collateralToLiquidate match");
+        assertEq(debtToRepay, repayDebtAssets, "debtToRepay match");
     }
 
     // CONFIGURATION

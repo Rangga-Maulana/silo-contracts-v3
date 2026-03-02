@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
-Detect changed factory deployment files between two git refs and optionally
-output a PR comment body.
+Detect changed deployment files (for observed contracts) between two git refs and
+optionally output a PR comment body.
 
-Used by CI to post a single (editable) comment on PRs when any factory
-deployments change (silo-core, silo-vaults, silo-oracles). Contract names are listed
-without addresses; CC users can be included.
+Used by CI to post a single (editable) comment on PRs when any observed contract
+deployments change. Only contracts listed in OBSERVED_CONTRACTS are considered;
+edit that list to control which deployments trigger the notification.
 
 Usage:
-  # List changed factory contract names (one per line)
+  # List changed observed contract names (one per line)
   python3 scripts/changed_factories_pr_comment.py --base origin/master --head HEAD
 
   # Output full markdown comment body to a file for sticky-pull-request-comment
@@ -21,30 +21,56 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import re
 import subprocess
 import sys
 from pathlib import Path
 
-# Deployment roots we consider for "factory" changes
+# Deployment roots we consider
 DEPLOYMENT_ROOTS = (
     "silo-core/deployments/",
     "silo-vaults/deployments/",
     "silo-oracles/deployments/",
 )
 
+# Contract names (Solidity filenames without .sol) whose deployment changes we notify about.
+# Edit this list to add or remove observed contracts.
+OBSERVED_CONTRACTS = (
+    # silo-core
+    "SiloFactory",
+    "SiloHookV2",
+    "SiloHookV3",
+    "DynamicKinkModelFactory",
+    # "InterestRateModelV2Factory",
+    "SiloIncentivesControllerFactory",
+    # silo-vaults
+    "SiloVaultsFactory",
+    "IdleVaultsFactory",
+    # "SiloIncentivesControllerCLFactory",
+    # silo-oracles
+    "ManageableOracleFactory",
+    "OracleScalerFactory",
+    "ChainlinkV3OracleFactory",
+    "DIAOracleFactory",
+    "ERC4626OracleFactory",
+    "ERC4626OracleWithUnderlyingFactory",
+    "ERC4626OracleHardcodeQuoteFactory",
+    "PTLinearOracleFactory",
+    "PythAggregatorFactory",
+)
+
 # CC usernames for the PR comment
-CC_USERS = ["yvesfracari", "jean-neiverth"]
+CC_USERS = ["siros-ena", "tyko0x", "yvesfracari", "jean-neiverth"]
 
 
-def is_factory_deployment_path(relpath: str) -> bool:
-    """True if path is under a deployment root and filename is a factory (*Factory*.sol.json)."""
+def is_observed_deployment_path(relpath: str) -> bool:
+    """True if path is under a deployment root and contract name is in OBSERVED_CONTRACTS."""
     if not any(relpath.startswith(root) for root in DEPLOYMENT_ROOTS):
         return False
     name = Path(relpath).name
     if not name.endswith(".sol.json"):
         return False
-    return "Factory" in name
+    contract_name = Path(relpath).stem.removesuffix(".sol")
+    return contract_name in OBSERVED_CONTRACTS
 
 
 def contract_name_from_path(relpath: str) -> str:
@@ -67,7 +93,7 @@ def get_changed_files(base: str, head: str, repo_root: Path) -> list[str]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="List changed factory deployments and optionally format as PR comment.",
+        description="List changed observed contract deployments (see OBSERVED_CONTRACTS) and optionally format as PR comment.",
     )
     parser.add_argument(
         "--base",
@@ -95,33 +121,28 @@ def main() -> int:
 
     repo_root = Path(__file__).resolve().parent.parent
     changed = get_changed_files(args.base, args.head, repo_root)
-    factory_paths = [p for p in changed if is_factory_deployment_path(p)]
-    contract_names = sorted({contract_name_from_path(p) for p in factory_paths})
+    observed_paths = [p for p in changed if is_observed_deployment_path(p)]
+    contract_names = sorted({contract_name_from_path(p) for p in observed_paths})
 
     if args.format == "names":
         for name in contract_names:
             print(name)
         return 0
 
-    # Format as PR comment body
+    # Format as PR comment body – only when there are changes; no comment otherwise
     if not contract_names:
-        body_lines = [
-            "🏭 **Factories**",
-            "",
-            "No factory deployment changes in this PR.",
-        ]
-    else:
-        body_lines = [
-            "🏭 **Factories**",
-            "",
-            "Changed factory deployments (contract names):",
-            "",
-        ]
-        for name in contract_names:
-            body_lines.append(f"- `{name}`")
-        body_lines.append("")
-        body_lines.append("⚠️ Do not copy or use these addresses until this PR is merged. This is a notification only; after merge, use the new deployment addresses.")
-        body_lines.append("")
+        return 0
+    body_lines = [
+        "🏭 **Deployments**",
+        "",
+        "Changed observed deployments (contract names):",
+        "",
+    ]
+    for name in contract_names:
+        body_lines.append(f"- `{name}`")
+    body_lines.append("")
+    body_lines.append("⚠️ Do not copy or use these addresses until this PR is merged. This is a notification only; after merge, use the new deployment addresses.")
+    body_lines.append("")
     if args.cc:
         body_lines.append("CC: " + " ".join(f"@{u}" for u in args.cc))
 

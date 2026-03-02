@@ -13,7 +13,7 @@ import {SiloVaultsVerifier} from "./SiloVaultsVerifier.s.sol";
 /**
     FOUNDRY_PROFILE=vaults \
         forge script silo-vaults/deploy/MainnetDeploy.s.sol:MainnetDeploy \
-        --ffi --rpc-url $RPC_INJECTIVE --broadcast --slow --verify
+        --ffi --rpc-url $RPC_BNB --broadcast --verify
 
     Resume verification:
     FOUNDRY_PROFILE=vaults \

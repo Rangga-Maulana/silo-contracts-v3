@@ -26,9 +26,10 @@ import {SiloConfig} from "silo-core/contracts/SiloConfig.sol";
 import {CloneDeterministic} from "silo-core/contracts/lib/CloneDeterministic.sol";
 import {Views} from "silo-core/contracts/lib/Views.sol";
 import {Whitelist} from "silo-core/contracts/hooks/_common/Whitelist.sol";
+import {IVersioned} from "silo-core/contracts/interfaces/IVersioned.sol";
 
 /// @notice Silo Deployer
-contract SiloDeployer is Create2Factory, ISiloDeployer {
+contract SiloDeployer is Create2Factory, ISiloDeployer, IVersioned {
     // solhint-disable var-name-mixedcase
     IInterestRateModelV2Factory public immutable IRM_CONFIG_FACTORY;
     IDynamicKinkModelFactory public immutable DYNAMIC_KINK_MODEL_FACTORY;
@@ -97,6 +98,11 @@ contract SiloDeployer is Create2Factory, ISiloDeployer {
         _createIncentivesController(siloConfig, _siloInitData);
 
         emit SiloCreated(siloConfig);
+    }
+
+    /// @inheritdoc IVersioned
+    function VERSION() external pure returns (string memory version) {
+        return "SiloDeployer 4.4.2";
     }
 
     /// @notice Create an incentives controller if the hook is defaulting

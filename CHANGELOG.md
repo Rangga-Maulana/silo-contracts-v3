@@ -5,6 +5,19 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
+
+## [4.4.0] - 2026-03-02
+### Added
+- silo V3 audits reports (#1788)
+- silo-core: add new event to mark liquidation type (#1805)
+
+### Updated
+- set gauge for defaulting automatically in silo deployer (#1803)
+- silo-core: adjust LT margin for defaulting (#1804)
+
+### Fixed
+- redeploy vaults because of removing cast to `uint104`
+
 ## [4.3.0] - 2026-02-24
 ### Updated
 - redeploy SiloFactory, Silo implementation, SiloDeployer after fixing forge linter issues

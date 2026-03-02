@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## Unreleased
 
+## [4.4.2] - 2026-03-02
+### Changed
+- redeploy SiloDeployer with automatic gauge creation
+
 ## [4.4.1] - 2026-03-02
 ### Updated
 - update DAO addresses

@@ -18,7 +18,7 @@ contract DKinkIRMConfigData is DKinkIRMConfigDataReader, DKinkIRMImmutableDataRe
         return (_getAllConfigs(), _getAllImmutableArgs());
     }
 
-    /// @param _name The name of the KinkIRM config in format <config>:<immutable> eg: "static-5.5-20:T0_CAP_MAX"
+    /// @param _name The name of the KinkIRM config in format <config>:<immutable> eg: "static-5.5-20:T1day_C200"
     function getConfigData(string memory _name)
         public
         view

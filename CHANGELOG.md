@@ -6,6 +6,13 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## Unreleased
 
+## [4.4.3] - 2026-03-04
+### Markets
+- v3 market: GM/WETH Arbitrum (#1809)
+
+### Removed
+- remove `T0_CAP_MAX` IRM config
+
 ## [4.4.2] - 2026-03-02
 ### Changed
 - redeploy SiloDeployer with automatic gauge creation

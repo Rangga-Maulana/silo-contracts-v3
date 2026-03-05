@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## Unreleased
 
+## [4.4.4] - 2026-03-05
+### Updated
+- redeploy vault oracles
+
 ## [4.4.3] - 2026-03-04
 ### Markets
 - v3 market: GM/WETH Arbitrum (#1809)

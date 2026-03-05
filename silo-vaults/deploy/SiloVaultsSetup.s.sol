@@ -10,13 +10,14 @@ import {IIncentivesClaimingLogicFactory} from "silo-vaults/contracts/interfaces/
 import {ISilo} from "silo-core/contracts/interfaces/ISilo.sol";
 import {CommonDeploy} from "./common/CommonDeploy.sol";
 import {IERC20Metadata} from "openzeppelin5/token/ERC20/extensions/IERC20Metadata.sol";
+import {IERC4626} from "openzeppelin5/interfaces/IERC4626.sol";
 import {ChainsLib} from "silo-foundry-utils/lib/ChainsLib.sol";
 import {AddrLib} from "silo-foundry-utils/lib/AddrLib.sol";
 
 import {SiloVaultsContracts, SiloVaultsDeployments} from "silo-vaults/common/SiloVaultsContracts.sol";
 
 /*
-FOUNDRY_PROFILE=vaults ASSET=USDC \
+FOUNDRY_PROFILE=vaults ASSET=USDC SILO=0x78445e53151b523F64d70C929ED602B8F75014c8 \
     forge script silo-vaults/deploy/SiloVaultsSetup.s.sol:SiloVaultsSetup \
     --ffi --rpc-url $RPC_ARBITRUM --broadcast
 
@@ -43,12 +44,15 @@ contract SiloVaultsSetup is CommonDeploy {
         uint256 privateKey = uint256(vm.envBytes32("PRIVATE_KEY"));
         address deployer = vm.addr(privateKey);
 
+        IERC4626 silo = IERC4626(vm.envAddress("SILO"));
+        require(silo.asset() == asset, "Silo asset mismatch");
+
         vm.startBroadcast(privateKey);
 
         (ISiloVault vault,,) = vaultDeployer.createSiloVault(
             ISiloVaultDeployer.CreateSiloVaultParams({
                 initialOwner: deployer,
-                initialTimelock: 1 days,
+                initialTimelock: 0,
                 asset: asset,
                 incentivesControllerOwner: deployer,
                 name: vaultName,
@@ -58,7 +62,8 @@ contract SiloVaultsSetup is CommonDeploy {
             })
         );
 
-        vault.submitCap(vault, supplyCap);
+        vault.submitCap(silo, supplyCap);
+        vault.acceptCap(silo);
 
         console2.log("Vault deployed at", address(vault));
 

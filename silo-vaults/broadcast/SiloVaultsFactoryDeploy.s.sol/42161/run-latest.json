@@ -59,7 +59,7 @@
       "effectiveGasPrice": "0x1340390",
       "from": "0xaad2f138eb20fb60c34ac70624339ccbac2320fa",
       "to": "0x4e59b44847b379578588920ca78fbf26c0b4956c",
-      "contractAddress": null,
+      "contractAddress": "0xb0e9bb5cf4492a7e32f9003552a4572b99fe0b6f",
       "gasUsedForL1": "0x45fc",
       "l1BlockNumber": "0x1773ce3",
       "timeboosted": false
@@ -110,7 +110,7 @@
       "value": "0xF2d131C0f705420114D8845112A550A2F5223E70"
     }
   },
-  "timestamp": 1772717533089,
+  "timestamp": 1772717589189,
   "chain": 42161,
   "commit": "054ccdd61"
 }

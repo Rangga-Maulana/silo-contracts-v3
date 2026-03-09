@@ -4,6 +4,8 @@ pragma solidity >=0.7.6 <0.9.0;
 import {Deployments} from "silo-foundry-utils/lib/Deployments.sol";
 
 library SiloVaultsContracts {
+    string public constant SILO_VAULT = "SiloVault.sol";
+    string public constant IDLE_VAULT = "IdleVault.sol";
     string public constant SILO_VAULTS_FACTORY = "SiloVaultsFactory.sol";
     string public constant PUBLIC_ALLOCATOR = "PublicAllocator.sol";
     string public constant IDLE_VAULTS_FACTORY = "IdleVaultsFactory.sol";

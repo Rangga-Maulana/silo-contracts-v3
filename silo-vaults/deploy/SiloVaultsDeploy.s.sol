@@ -3,6 +3,8 @@ pragma solidity 0.8.28;
 
 import {IVaultIncentivesModule} from "silo-vaults/contracts/interfaces/IVaultIncentivesModule.sol";
 import {SiloVault} from "silo-vaults/contracts/SiloVault.sol";
+import {IdleVault} from "silo-vaults/contracts/IdleVault.sol";
+import {SiloVaultsContracts} from "silo-vaults/common/SiloVaultsContracts.sol";
 
 import {CommonDeploy} from "./common/CommonDeploy.sol";
 import {AddrLib} from "silo-foundry-utils/lib/AddrLib.sol";
@@ -37,7 +39,7 @@ contract SiloVaultsDeploy is CommonDeploy {
 
         vm.startBroadcast(deployerPrivateKey);
 
-        new SiloVault({
+        SiloVault vault = new SiloVault({
             _owner: owner,
             _initialTimelock: initialTimelock,
             _vaultIncentivesModule: vaultIncentivesModule,
@@ -46,6 +48,16 @@ contract SiloVaultsDeploy is CommonDeploy {
             _symbol: symbol
         });
 
+        IdleVault idleVault = new IdleVault({
+            onlyDepositor: address(1),
+            _asset: asset,
+            _name: "idle vault",
+            _symbol: "IV"
+        });
+
         vm.stopBroadcast();
+
+        _registerDeployment(address(vault), SiloVaultsContracts.SILO_VAULT);
+        _registerDeployment(address(idleVault), SiloVaultsContracts.IDLE_VAULT);
     }
 }

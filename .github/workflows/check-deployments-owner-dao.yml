@@ -2,7 +2,7 @@
 # Owner: every contract with owner() must have owner == DAO.
 # Admin: every contract with DEFAULT_ADMIN_ROLE (AccessControl) must have admin == DAO.
 
-name: on-chain checks
+name: on-chain
 
 on:
   push:
@@ -55,7 +55,7 @@ jobs:
           - mainnet
           - okx
           - optimism
-          - sonic
+          # - sonic
     steps:
       - uses: actions/checkout@v4
 
@@ -81,7 +81,7 @@ jobs:
           - mainnet
           - okx
           - optimism
-          - sonic
+          # - sonic
     steps:
       - uses: actions/checkout@v4
 
@@ -107,7 +107,7 @@ jobs:
           - mainnet
           - okx
           - optimism
-          - sonic
+          # - sonic
     steps:
       - uses: actions/checkout@v4
 

@@ -6,6 +6,23 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## Unreleased
 
+## [4.4.5] - 2026-03-10
+### Markets
+
+- v3 market PGOLD / USD₮0 on Arbitrum (#1828)
+- v3 market: mHyperBTC / WBTC on Mainnet (#1827)
+- v3 market: PT-srNUSD-28MAY2026 / USDC on Mainnet (#1823)
+- v3 market: Silo_PT-jrNUSD-28MAY2026 / USDC on Mainnet (#1824)
+- v3 market: savUSD / USDC on mainnet (#1822)
+- v3 market: mfONE / USDC on Mainnet (#1821)
+- v3 market: RLP / USSC on mainnet (#1820)
+- v3 market: stAVAX / WAWAX on Avalanche (#1819)
+- silo-core: redeploy GM ETH / USDC on Arbitrum (#1817)
+- silo-core: redeploy GM BTC/USDC market on Avalanche (#1816)
+- silo-core: v3 market GLV WAVAX-USDC / USDC (#1815)
+- v3 market:  GM ETH / USDC on Arbitrum (#1814)
+- v3 market: GM BTC / USDC on Arbitrum (#1813)
+
 ## [4.4.4] - 2026-03-05
 ### Updated
 - redeploy vault oracles

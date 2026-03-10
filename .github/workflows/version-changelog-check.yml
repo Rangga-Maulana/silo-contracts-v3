@@ -1,4 +1,4 @@
-name: Version and Changelog Check
+name: Release Version and Changelog
 
 # Only for release/hotfix TO master. Does NOT run for PRs into release/* (e.g. feature/* -> release/4.0.0).
 on:

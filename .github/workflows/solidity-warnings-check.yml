@@ -1,4 +1,4 @@
-name: Solidity Compilation Check For Warnings
+name: Solidity Warnings
 
 on:
   push:

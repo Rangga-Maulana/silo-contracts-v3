@@ -1,4 +1,4 @@
-name: Check Version Constants (Regular PRs)
+name: VERSION
 
 on:
   pull_request:
@@ -10,7 +10,7 @@ on:
 
 jobs:
   check-version:
-    name: Check VERSION constants for regular PRs
+    name: Check constants for regular PRs
     runs-on: ubuntu-latest
     
     # Only run if PR is NOT from release/* or hotfix/* branch

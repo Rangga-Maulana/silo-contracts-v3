@@ -40,9 +40,10 @@ def sort_json_file(file_path: str) -> bool:
         # Sort the data alphabetically by key
         sorted_data = dict(sorted(data.items()))
         
-        # Write the sorted data back to the file with proper formatting
+        # Write the sorted data back to the file with proper formatting.
+        # ensure_ascii=False keeps UTF-8 characters (e.g. ₮) instead of \u-escapes.
         with open(file_path, 'w', encoding='utf-8') as f:
-            json.dump(sorted_data, f, indent=4, separators=(',', ': '))
+            json.dump(sorted_data, f, indent=4, separators=(',', ': '), ensure_ascii=False)
             f.write('\n')  # Add newline at the end
         
         print(f"✅ Sorted: {os.path.basename(file_path)}")
@@ -75,8 +76,9 @@ def sort_silo_deployments_file(file_path: str) -> bool:
         for chain in sorted(data.keys()):
             sorted_data[chain] = dict(sorted(data[chain].items()))
         
+        # ensure_ascii=False keeps UTF-8 characters (e.g. ₮) instead of \u-escapes.
         with open(file_path, 'w', encoding='utf-8') as f:
-            json.dump(sorted_data, f, indent=2, separators=(',', ': '))
+            json.dump(sorted_data, f, indent=2, separators=(',', ': '), ensure_ascii=False)
             f.write('\n')
         
         print(f"✅ Sorted: {os.path.basename(file_path)}")

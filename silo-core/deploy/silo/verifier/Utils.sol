@@ -10,6 +10,7 @@ import {IERC4626} from "openzeppelin5/interfaces/IERC4626.sol";
 import {ISiloOracle} from "silo-core/contracts/interfaces/ISiloOracle.sol";
 import {ISiloConfig} from "silo-core/contracts/interfaces/ISiloConfig.sol";
 import {InterestRateModelConfigData} from "silo-core/deploy/input-readers/InterestRateModelConfigData.sol";
+import {IPartialLiquidationByDefaulting} from "silo-core/contracts/hooks/defaulting/PartialLiquidationByDefaulting.sol";
 import {DKinkIRMConfigData} from "silo-core/deploy/input-readers/DKinkIRMConfigData.sol";
 import {
     InterestRateModelV2, IInterestRateModelV2
@@ -21,6 +22,9 @@ import {ChainlinkV3OracleConfig} from "silo-oracles/contracts/chainlinkV3/Chainl
 import {ChainlinkV3Oracle} from "silo-oracles/contracts/chainlinkV3/ChainlinkV3Oracle.sol";
 import {ChainlinkV3OracleConfig} from "silo-oracles/contracts/chainlinkV3/ChainlinkV3OracleConfig.sol";
 import {IChainlinkV3Oracle} from "silo-oracles/contracts/interfaces/IChainlinkV3Oracle.sol";
+import {IManageableOracle} from "silo-oracles/contracts/interfaces/IManageableOracle.sol";
+import {IVersioned} from "silo-core/contracts/interfaces/IVersioned.sol";
+import {StringLib} from "silo-core/deploy/lib/StringLib.sol";
 
 import {IDynamicKinkModelConfig} from "silo-core/contracts/interfaces/IDynamicKinkModelConfig.sol";
 import {IDynamicKinkModel} from "silo-core/contracts/interfaces/IDynamicKinkModel.sol";
@@ -201,7 +205,9 @@ library Utils {
             return (address(0), address(0));
         }
 
-        try ChainlinkV3Oracle(address(_oracle)).oracleConfig() returns (ChainlinkV3OracleConfig oracleConfig) {
+        _oracle = address(ifManageableGetOracle(ISiloOracle(_oracle)));
+
+        try ChainlinkV3Oracle(_oracle).oracleConfig() returns (ChainlinkV3OracleConfig oracleConfig) {
             (, bytes memory data) =
                 address(oracleConfig).staticcall(abi.encodeWithSelector(ChainlinkV3OracleConfig.getConfig.selector));
 
@@ -215,6 +221,31 @@ library Utils {
             primaryAggregator = address(config.primaryAggregator);
             secondaryAggregator = address(config.secondaryAggregator);
         } catch {}
+    }
+
+    function isManageableOracle(address _oracle) internal pure returns (bool result) {
+        try IVersioned(_oracle).VERSION() returns (string memory version) {
+            string[] memory parts = StringLib.split(version, " ");
+            return keccak256(bytes(parts[0])) == keccak256(bytes("ManageableOracle"));
+        } catch {
+            return false;
+        }
+    }
+
+    function ifManageableGetOracle(ISiloOracle _oracle) internal view returns (ISiloOracle oracle) {
+        if (isManageableOracle(address(_oracle))) {
+            oracle = IManageableOracle(address(_oracle)).oracle();
+        } else {
+            oracle = _oracle;
+        }
+    }
+    
+    function isDefaultingHook(address _hook) internal view returns (bool) {
+        try IPartialLiquidationByDefaulting(_hook).LIQUIDATION_LOGIC() returns (address logic) {
+            return logic != address(0);
+        } catch {
+            return false;
+        }
     }
 
     function tryGetPT(address _aggregator) internal view returns (address _pt) {

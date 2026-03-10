@@ -1,4 +1,4 @@
-name: CryticToFoundry Tests
+name: CryticToFoundry
 
 on:
     push:

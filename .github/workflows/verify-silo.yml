@@ -1,4 +1,4 @@
-name: Verify Silo Config
+name: Market Verification
 
 env:
     RPC_MAINNET: ${{ secrets.RPC_MAINNET }}

@@ -148,6 +148,10 @@ contract Logger is Test {
 
         if (configData0.solvencyOracle != address(0)) {
             _logOracle(ISiloOracle(configData0.solvencyOracle), configData0.token);
+        } else {
+            uint256 tokenDecimals = Utils.tryGetTokenDecimals(configData0.token);
+            string memory price = PriceFormatter.formatPriceInE18(10 ** tokenDecimals);
+            console2.log("\n\tOracle is not set for silo0, price will be: ", price, "\n", DELIMITER);
         }
 
         if (configData0.maxLtvOracle != configData0.solvencyOracle && configData0.maxLtvOracle != address(0)) {
@@ -156,6 +160,10 @@ contract Logger is Test {
 
         if (configData1.solvencyOracle != address(0)) {
             _logOracle(ISiloOracle(configData1.solvencyOracle), configData1.token);
+        } else {
+            uint256 tokenDecimals = Utils.tryGetTokenDecimals(configData1.token);
+            string memory price = PriceFormatter.formatPriceInE18(10 ** tokenDecimals);
+            console2.log("\n\tOracle is not set for silo1, price will be: ", price, "\n", DELIMITER);
         }
 
         if (configData1.maxLtvOracle != configData1.solvencyOracle && configData1.maxLtvOracle != address(0)) {

@@ -28,7 +28,7 @@ import {SiloVaultsContracts, SiloVaultsDeployments} from "silo-vaults/common/Sil
 /*
 FOUNDRY_PROFILE=vaults ASSET=USDC SILO=0x78445e53151b523F64d70C929ED602B8F75014c8 \
     forge script silo-vaults/deploy/SiloVaultsSetup.s.sol:SiloVaultsSetup \
-    --ffi --rpc-url $RPC_ARBITRUM --broadcast
+    --ffi --rpc-url $RPC_ARBITRUM --broadcast --verify
 
 This script sets up the vault for QA.
 
@@ -53,6 +53,8 @@ contract SiloVaultsSetup is CommonDeploy, StdCheats {
                 SiloVaultsContracts.SILO_INCENTIVES_CONTROLLER_CL_FACTORY, ChainsLib.chainAlias()
             )
         );
+
+        console2.log("Trusted factories", address(trustedFactories[0]));
 
         ISilo[] memory silosWithIncentives = new ISilo[](0);
 
@@ -164,7 +166,10 @@ contract SiloVaultsSetup is CommonDeploy, StdCheats {
 
         vm.startPrank(depositor);
         assets = _vault.redeem(shares, depositor, depositor);
+
+        console2.log("balance before claiming", IERC20(asset).balanceOf(depositor));
         vaultIncentives.claimRewards(depositor);
+        console2.log("balance after claiming", IERC20(asset).balanceOf(depositor));
         require(IERC20(asset).balanceOf(depositor) > assets, "expect rewards");
 
         vm.stopPrank();

@@ -38,33 +38,46 @@ jobs:
         run: |
           echo "$SILO_CONFIG" | python .github/scripts/add_silo_deployment.py
 
-      - name: Extract deployment key for branch name
-        id: branch
+      - name: Extract metadata for PR
+        id: meta
         env:
           SILO_CONFIG: ${{ inputs.silo_config }}
         run: |
-          KEY=$(echo "$SILO_CONFIG" | python -c "
-          import json, sys, re
+          echo "$SILO_CONFIG" | python -c "
+          import json, sys, re, os
           d = json.load(sys.stdin)
           key = d.get('deploymentKey', 'deployment')
           key = re.sub(r'[^a-zA-Z0-9_-]', '-', key)[:60]
-          print(key)
-          ")
-          echo "key=$KEY" >> $GITHUB_OUTPUT
+          sym0 = d.get('symbol0', 'SYMBOL0')
+          sym1 = d.get('symbol1', 'SYMBOL1')
+          net = d.get('network', 'Network')
+          url = d.get('verificationUrl', '')
+          ep0 = d.get('externalPrice0', 1)
+          ep1 = d.get('externalPrice1', 1)
+          out = os.environ.get('GITHUB_OUTPUT', '')
+          if out:
+              with open(out, 'a') as f:
+                  f.write(f'key={key}\n')
+                  f.write(f'sym0={sym0}\n')
+                  f.write(f'sym1={sym1}\n')
+                  f.write(f'net={net}\n')
+                  f.write(f'url={url}\n')
+                  f.write(f'ep0={ep0}\n')
+                  f.write(f'ep1={ep1}\n')
+          "
 
       - name: Create branch and commit
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          BRANCH="add-deployment-${{ steps.branch.outputs.key }}"
+          BRANCH="add-deployment-${{ steps.meta.outputs.key }}"
           git checkout -b "$BRANCH"
           git add silo-core/deploy/silo/_siloDeployments.json
           git status
           if git diff --staged --quiet; then
-            echo "No changes (entry may already exist)"
             echo "no_changes=true" >> $GITHUB_OUTPUT
           else
-            git commit -m "Add ${{ steps.branch.outputs.key }} to _siloDeployments.json"
+            git commit -m "silo-market: ${{ steps.meta.outputs.sym0 }} / ${{ steps.meta.outputs.sym1 }} on ${{ steps.meta.outputs.net }}"
             git push origin "$BRANCH"
           fi
         id: commit
@@ -73,13 +86,29 @@ jobs:
         if: steps.commit.outputs.no_changes != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERIFICATION_URL: ${{ steps.meta.outputs.url }}
+          SYM0: ${{ steps.meta.outputs.sym0 }}
+          SYM1: ${{ steps.meta.outputs.sym1 }}
+          NET: ${{ steps.meta.outputs.net }}
+          EP0: ${{ steps.meta.outputs.ep0 }}
+          EP1: ${{ steps.meta.outputs.ep1 }}
         run: |
+          {
+            if [ -n "$VERIFICATION_URL" ]; then
+              echo "Automated PR from [silo-market-crafter](https://github.com/silo-finance/silo-market-crafter) - [Verification]($VERIFICATION_URL)"
+            else
+              echo "Automated PR from [silo-market-crafter](https://github.com/silo-finance/silo-market-crafter)"
+            fi
+            echo ""
+            echo "## Price check for new market"
+            echo ""
+            echo "EXTERNAL_PRICE_0=$EP0"
+            echo "EXTERNAL_PRICE_1=$EP1"
+          } > pr_body.md
           gh pr create \
             --base develop \
-            --title "Add ${{ steps.branch.outputs.key }} to _siloDeployments.json" \
-            --body "Automated PR from [silo-market-crafter](https://github.com/silo-finance/silo-market-crafter) Create Silo Deployment PR workflow.
-
-          Config: \`${{ inputs.silo_config }}\`"
+            --title "new market: $SYM0 / $SYM1 on $NET" \
+            --body-file pr_body.md
 
       - name: Summary
         run: |

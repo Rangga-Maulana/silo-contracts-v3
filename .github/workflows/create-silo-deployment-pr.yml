@@ -1,6 +1,9 @@
 # Manual workflow to create a PR adding a new Silo deployment to _siloDeployments.json.
 # Trigger from Actions tab; paste market configuration JSON: {"chainName":"...","deploymentKey":"...","address":"0x..."}
 # Config can be copied from silo-market-crafter Verification step ("Open PR for developer" button).
+#
+# For CI (verify-silo) to run on the created PR, add a PAT with `repo` scope as secret `PAT`.
+# Without it, the PR is created by github-actions[bot] and pull_request workflows are skipped.
 
 name: Create Silo Deployment PR
 
@@ -25,6 +28,7 @@ jobs:
         with:
           ref: develop
           fetch-depth: 0
+          token: ${{ secrets.PAT || secrets.GITHUB_TOKEN }}
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -85,7 +89,7 @@ jobs:
       - name: Create Pull Request
         if: steps.commit.outputs.no_changes != 'true'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.PAT || secrets.GITHUB_TOKEN }}
           VERIFICATION_URL: ${{ steps.meta.outputs.url }}
           SYM0: ${{ steps.meta.outputs.sym0 }}
           SYM1: ${{ steps.meta.outputs.sym1 }}
@@ -95,15 +99,17 @@ jobs:
         run: |
           {
             if [ -n "$VERIFICATION_URL" ]; then
-              echo "Automated PR from [silo-market-crafter](https://github.com/silo-finance/silo-market-crafter) - [Verification]($VERIFICATION_URL)"
-            else
-              echo "Automated PR from [silo-market-crafter](https://github.com/silo-finance/silo-market-crafter)"
+              echo "[Silo Market Crafter Verification]($VERIFICATION_URL)"
             fi
             echo ""
             echo "## Price check for new market"
             echo ""
             echo "EXTERNAL_PRICE_0=$EP0"
             echo "EXTERNAL_PRICE_1=$EP1"
+            echo ""
+            echo "### Note"
+            echo ""
+            echo "CI runs automatically when the repo has an up-to-date PAT configured. Otherwise, you can trigger CI by closing and reopening this PR."
           } > pr_body.md
           gh pr create \
             --base develop \

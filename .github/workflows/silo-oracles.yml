@@ -23,11 +23,11 @@ on:
       - silo-oracles/**/*.js
       - silo-oracles/**/*.json
       - silo-core/contracts/interfaces/ISiloOracle.sol
-      - package.json
-      - yarn.lock
-      - gitmodules/*
-      - .gitmodules
-      - .github/workflows/silo-oracles.yml
+      - '.github/workflows/silo-oracles.yml'
+      - '.gitmodules'
+      - 'gitmodules/**'
+      - 'silo-core/deploy/input/anvil/**'
+      - 'silo-core/deploy/input/irmConfigs/**'
 
   pull_request:
     paths:
@@ -36,11 +36,11 @@ on:
       - silo-oracles/**/*.js
       - silo-oracles/**/*.json
       - silo-core/contracts/interfaces/ISiloOracle.sol
-      - package.json
-      - yarn.lock
-      - gitmodules/*
-      - .gitmodules
-      - .github/workflows/silo-oracles.yml
+      - '.github/workflows/silo-oracles.yml'
+      - '.gitmodules'
+      - 'gitmodules/**'
+      - 'silo-core/deploy/input/anvil/**'
+      - 'silo-core/deploy/input/irmConfigs/**'
 
 jobs:
 

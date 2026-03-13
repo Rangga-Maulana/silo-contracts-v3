@@ -21,8 +21,6 @@ on:
       - x-silo/**/*.ts
       - x-silo/**/*.js
       - x-silo/**/*.json
-      - package.json
-      - yarn.lock
       - gitmodules/*
       - .gitmodules
       - .github/workflows/x-silo.yml
@@ -33,8 +31,6 @@ on:
       - x-silo/**/*.ts
       - x-silo/**/*.js
       - x-silo/**/*.json
-      - package.json
-      - yarn.lock
       - gitmodules/*
       - .gitmodules
       - .github/workflows/x-silo.yml

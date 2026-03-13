@@ -23,13 +23,11 @@ on:
             - silo-core/**/*.sol
             - silo-core/**/*.ts
             - silo-core/**/*.js
-            - silo-core/**/*.json
+            - silo-core/deployments/**/*.json
             - silo-oracles/**/*.sol
             - silo-oracles/**/*.ts
             - silo-oracles/**/*.js
-            - silo-oracles/**/*.json
-            - package.json
-            - yarn.lock
+            - silo-oracles/deployments/**/*.json
             - gitmodules/*
             - .gitmodules
             - .github/workflows/silo-deployments-checks.yml
@@ -41,13 +39,11 @@ on:
             - silo-core/**/*.sol
             - silo-core/**/*.ts
             - silo-core/**/*.js
-            - silo-core/**/*.json
+            - silo-core/deployments/**/*.json
             - silo-oracles/**/*.sol
             - silo-oracles/**/*.ts
             - silo-oracles/**/*.js
-            - silo-oracles/**/*.json
-            - package.json
-            - yarn.lock
+            - silo-oracles/deployments/**/*.json
             - gitmodules/*
             - .gitmodules
             - .github/workflows/silo-deployments-checks.yml

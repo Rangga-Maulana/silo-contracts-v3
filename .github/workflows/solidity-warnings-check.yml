@@ -5,23 +5,11 @@ on:
     branches: [ master, develop ]
     paths:
       - '**/*.sol'
-      - '**/*.ts'
-      - '**/*.js'
-      - '**/*.json'
-      - 'package.json'
-      - 'yarn.lock'
-      - 'foundry.toml'
       - '.github/workflows/solidity-warnings-check.yml'
 
   pull_request:
     paths:
       - '**/*.sol'
-      - '**/*.ts'
-      - '**/*.js'
-      - '**/*.json'
-      - 'package.json'
-      - 'yarn.lock'
-      - 'foundry.toml'
       - '.github/workflows/solidity-warnings-check.yml'
 
 env:

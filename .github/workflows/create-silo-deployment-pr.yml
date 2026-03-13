@@ -1,0 +1,91 @@
+# Manual workflow to create a PR adding a new Silo deployment to _siloDeployments.json.
+# Trigger from Actions tab; paste market configuration JSON: {"chainName":"...","deploymentKey":"...","address":"0x..."}
+# Config can be copied from silo-market-crafter Verification step ("Open PR for developer" button).
+
+name: Create Silo Deployment PR
+
+on:
+  workflow_dispatch:
+    inputs:
+      silo_config:
+        description: 'Market configuration'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  create-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: develop
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Validate and add deployment
+        id: add
+        env:
+          SILO_CONFIG: ${{ inputs.silo_config }}
+        run: |
+          echo "$SILO_CONFIG" | python .github/scripts/add_silo_deployment.py
+
+      - name: Extract deployment key for branch name
+        id: branch
+        env:
+          SILO_CONFIG: ${{ inputs.silo_config }}
+        run: |
+          KEY=$(echo "$SILO_CONFIG" | python -c "
+          import json, sys, re
+          d = json.load(sys.stdin)
+          key = d.get('deploymentKey', 'deployment')
+          key = re.sub(r'[^a-zA-Z0-9_-]', '-', key)[:60]
+          print(key)
+          ")
+          echo "key=$KEY" >> $GITHUB_OUTPUT
+
+      - name: Create branch and commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          BRANCH="add-deployment-${{ steps.branch.outputs.key }}"
+          git checkout -b "$BRANCH"
+          git add silo-core/deploy/silo/_siloDeployments.json
+          git status
+          if git diff --staged --quiet; then
+            echo "No changes (entry may already exist)"
+            echo "no_changes=true" >> $GITHUB_OUTPUT
+          else
+            git commit -m "Add ${{ steps.branch.outputs.key }} to _siloDeployments.json"
+            git push origin "$BRANCH"
+          fi
+        id: commit
+
+      - name: Create Pull Request
+        if: steps.commit.outputs.no_changes != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr create \
+            --base develop \
+            --title "Add ${{ steps.branch.outputs.key }} to _siloDeployments.json" \
+            --body "Automated PR from [silo-market-crafter](https://github.com/silo-finance/silo-market-crafter) Create Silo Deployment PR workflow.
+
+          Config: \`${{ inputs.silo_config }}\`"
+
+      - name: Summary
+        run: |
+          echo "## Create Silo Deployment PR" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ steps.commit.outputs.no_changes }}" = "true" ]; then
+            echo "No changes were made. The entry may already exist in _siloDeployments.json." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "PR created successfully." >> $GITHUB_STEP_SUMMARY
+          fi

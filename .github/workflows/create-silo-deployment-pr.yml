@@ -132,7 +132,8 @@ jobs:
             echo ""
             echo "## QA"
             echo ""
-            echo "- [ ] the external source price matches the on-chain price"
+            echo "- [ ] the external source price0 matches the on-chain price"
+            echo "- [ ] the external source price1 matches the on-chain price"
             echo "- [ ] The result of automatic verification:"
             echo "  - [ ] Market Crafter verification page for errors or warnings"
             echo "  - [ ] our internal script in PR, for errors"
@@ -142,6 +143,7 @@ jobs:
             echo "- [ ] correct oracle is used for token1"
             echo "- [ ] the IRM config0 has a known name"
             echo "- [ ] the IRM config1 has a known name"
+            echo "- [ ] if PT market: is discount correct"
           } > pr_body.md
           gh pr create \
             --base develop \

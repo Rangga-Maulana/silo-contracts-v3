@@ -35,6 +35,14 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Log input (debug)
+        env:
+          SILO_CONFIG: ${{ inputs.silo_config }}
+        run: |
+          echo "=== Market configuration input (paste below to reproduce) ==="
+          echo "$SILO_CONFIG"
+          echo "=== end of input ==="
+
       - name: Validate and add deployment
         id: add
         env:
@@ -58,6 +66,7 @@ jobs:
           url = d.get('verificationUrl', '')
           ep0 = d.get('externalPrice0', 1)
           ep1 = d.get('externalPrice1', 1)
+          price_sources = d.get('priceSources', '')
           out = os.environ.get('GITHUB_OUTPUT', '')
           if out:
               with open(out, 'a') as f:
@@ -68,6 +77,9 @@ jobs:
                   f.write(f'url={url}\n')
                   f.write(f'ep0={ep0}\n')
                   f.write(f'ep1={ep1}\n')
+          if price_sources:
+              with open('price_sources.txt', 'w') as f:
+                  f.write(price_sources)
           "
 
       - name: Create branch and commit
@@ -104,6 +116,12 @@ jobs:
             echo ""
             echo "## Price check for new market"
             echo ""
+            if [ -f price_sources.txt ]; then
+              echo "**price sources:**"
+              echo ""
+              cat price_sources.txt
+              echo ""
+            fi
             echo "EXTERNAL_PRICE_0=$EP0"
             echo "EXTERNAL_PRICE_1=$EP1"
             echo ""

@@ -23,6 +23,14 @@ jobs:
   create-pr:
     runs-on: ubuntu-latest
     steps:
+      - name: Log input (debug)
+        env:
+          SILO_CONFIG: ${{ inputs.silo_config }}
+        run: |
+          echo "=== Market configuration input (paste below to reproduce) ==="
+          printf '%s\n' "$SILO_CONFIG"
+          echo "=== end of input ==="
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -34,14 +42,6 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-
-      - name: Log input (debug)
-        env:
-          SILO_CONFIG: ${{ inputs.silo_config }}
-        run: |
-          echo "=== Market configuration input (paste below to reproduce) ==="
-          echo "$SILO_CONFIG"
-          echo "=== end of input ==="
 
       - name: Validate and add deployment
         id: add

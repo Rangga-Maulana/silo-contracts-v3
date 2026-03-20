@@ -6,6 +6,14 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## Unreleased
 
+## [4.4.6] - 2026-03-20
+### Markets
+- silo-market: syzUSD / USDC on Ethereum Mainnet
+- silo-market: PT-savETH-14MAY2026 / WETH on Ethereum Mainnet
+- silo-market: PT-savUSD-14MAY2026 / USDC on Ethereum Mainnet
+- silo-market: PT-reUSDe-25JUN2026 / USDC on Ethereum Mainnet
+- v3 market - PUSD / USD₮0 on Arbitrum (#1830)
+
 ## [4.4.5] - 2026-03-10
 ### Markets
 

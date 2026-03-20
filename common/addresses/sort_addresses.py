@@ -8,6 +8,7 @@ It also sorts silo-core/deploy/silo/_siloDeployments.json (nested: chain -> silo
 
 Usage:
     python3 common/addresses/sort_addresses.py
+    python3 common/addresses/sort_addresses.py --only-common-addresses
 
 The script will:
 1. Find all .json files in common/addresses
@@ -17,6 +18,7 @@ The script will:
 5. Preserve the original formatting (indentation, etc.)
 """
 
+import argparse
 import json
 import os
 import glob
@@ -96,6 +98,14 @@ SILO_DEPLOYMENTS_JSON = "silo-core/deploy/silo/_siloDeployments.json"
 
 def main():
     """Main function to sort all JSON files in the current directory and _siloDeployments.json."""
+    parser = argparse.ArgumentParser(description="Sort address JSON files alphabetically by key.")
+    parser.add_argument(
+        "--only-common-addresses",
+        action="store_true",
+        help="Only sort common/addresses/*.json (do not modify _siloDeployments.json).",
+    )
+    args = parser.parse_args()
+
     print("🔄 Starting address sorting process...")
     print("=" * 50)
     
@@ -106,9 +116,9 @@ def main():
     # Find all JSON files in the current directory
     json_files = glob.glob(os.path.join(current_dir, "*.json"))
     
-    # Add silo deployments file if it exists
     silo_deployments_path = os.path.join(repo_root, SILO_DEPLOYMENTS_JSON)
-    if os.path.isfile(silo_deployments_path):
+    # Add silo deployments file if present and not restricted
+    if not args.only_common_addresses and os.path.isfile(silo_deployments_path):
         json_files.append(silo_deployments_path)
     
     if not json_files:

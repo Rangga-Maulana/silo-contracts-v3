@@ -29,6 +29,10 @@ on:
       - scripts/merge_verification_reports.py
       - .github/workflows/check-deployments-verified-on-explorer.yml
 
+concurrency:
+  group: ${{ github.event_name == 'pull_request' && format('{0}-pr-{1}', github.workflow, github.event.pull_request.number) || format('{0}-ref-{1}', github.workflow, github.ref) }}
+  cancel-in-progress: true
+
 env:
   ETHERSCAN_API_KEY: ${{ secrets.ETHERSCAN_API_KEY }}
   ETHERSCAN_API_KEY_OKX: ${{ secrets.ETHERSCAN_API_KEY_OKX }}

@@ -4,6 +4,10 @@ on:
   pull_request:
     types: [opened, synchronize]
 
+concurrency:
+  group: ${{ github.event_name == 'pull_request' && format('{0}-pr-{1}', github.workflow, github.event.pull_request.number) || format('{0}-ref-{1}', github.workflow, github.ref) }}
+  cancel-in-progress: true
+
 jobs:
   generate-commit-list:
     runs-on: ubuntu-latest

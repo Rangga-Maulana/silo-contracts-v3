@@ -2,7 +2,7 @@
 """
 Generate (and optionally post) a PR comment for a newly deployed market.
 Content is formatted for use in Slack: new market notice with explorer link,
-verification comment link, and Silo Market Crafter view link.
+verification comment link, simulation (new market tests) comment link, and Silo Market Crafter view link.
 
 Usage:
   # Generate comment body (print to stdout; copy to Slack or use with sticky comment)
@@ -59,6 +59,9 @@ VERIFICATION_COMMENT_MARKERS_FALLBACK = (
     "deployment-verification",
 )
 
+# Simulation = LIVE MARKET QA (NewMarketTest) comment from verify-silo workflow
+SIMULATION_COMMENT_MARKERS = ("live-market-qa", "LIVE MARKET QA")
+
 
 def normalize_address(addr: str) -> str:
     return addr.strip().lower() if addr else ""
@@ -66,6 +69,29 @@ def normalize_address(addr: str) -> str:
 
 def get_verification_comment_url(repo: str, pr_number: int) -> str | None:
     """Return the HTML URL of the PR comment that contains verification report (prefer verify-silo)."""
+    return _get_comment_url_by_markers(
+        repo, pr_number,
+        VERIFICATION_COMMENT_MARKERS_PREFERRED,
+        VERIFICATION_COMMENT_MARKERS_FALLBACK,
+    )
+
+
+def get_simulation_comment_url(repo: str, pr_number: int) -> str | None:
+    """Return the HTML URL of the PR comment that contains new market tests (LIVE MARKET QA)."""
+    return _get_comment_url_by_markers(
+        repo, pr_number,
+        SIMULATION_COMMENT_MARKERS,
+        (),
+    )
+
+
+def _get_comment_url_by_markers(
+    repo: str,
+    pr_number: int,
+    preferred: tuple[str, ...],
+    fallback: tuple[str, ...],
+) -> str | None:
+    """Return the HTML URL of the first PR comment matching preferred markers, or fallback."""
     try:
         out = subprocess.run(
             ["gh", "api", f"repos/{repo}/issues/{pr_number}/comments"],
@@ -80,9 +106,9 @@ def get_verification_comment_url(repo: str, pr_number: int) -> str | None:
         fallback_url: str | None = None
         for c in comments:
             body = c.get("body", "")
-            if any(m in body for m in VERIFICATION_COMMENT_MARKERS_PREFERRED):
+            if any(m in body for m in preferred):
                 return c.get("html_url")
-            if fallback_url is None and any(m in body for m in VERIFICATION_COMMENT_MARKERS_FALLBACK):
+            if fallback_url is None and fallback and any(m in body for m in fallback):
                 fallback_url = c.get("html_url")
         return fallback_url
     except Exception:
@@ -106,6 +132,7 @@ def build_comment_body(
     address: str,
     chain: str,
     verification_url: str | None = None,
+    simulation_url: str | None = None,
 ) -> str:
     chain_display, explorer_base = CHAIN_CONFIG.get(
         chain, ("Mainnet", "https://etherscan.io/address/")
@@ -120,8 +147,9 @@ def build_comment_body(
         f"new market on {chain_display}:",
         f'"{market_name}":',
         f"- [{addr}]({explorer_link})" if explorer_link else f"- {addr}",
-        "- [verification]({})".format(verification_url) if verification_url else "- verification (comment not found)",
-        "- [view]({})".format(view_link) if view_link else "- view",
+        "- [PR verification]({})".format(verification_url) if verification_url else "- verification (comment not found)",
+        "- [PR simulation]({})".format(simulation_url) if simulation_url else "- simulation (comment not found)",
+        "- [Market config tree]({})".format(view_link) if view_link else "- view",
         "ready for production :white_check_mark:",
     ]
     return "\n".join(lines)
@@ -201,10 +229,12 @@ def main() -> int:
             return 0
         pr_number = args.pr or get_pr_number_from_event()
         verification_url: str | None = None
+        simulation_url: str | None = None
         if args.repo and pr_number is not None:
             verification_url = get_verification_comment_url(args.repo, pr_number)
+            simulation_url = get_simulation_comment_url(args.repo, pr_number)
         blocks = [
-            build_comment_body(name, addr, chain, verification_url)
+            build_comment_body(name, addr, chain, verification_url, simulation_url)
             for chain, name, addr in new_markets
         ]
         body = "\n\n---\n\n".join(blocks)
@@ -226,14 +256,17 @@ def main() -> int:
         return 1
 
     verification_url = None
+    simulation_url = None
     if args.repo and pr_number is not None:
         verification_url = get_verification_comment_url(args.repo, pr_number)
+        simulation_url = get_simulation_comment_url(args.repo, pr_number)
 
     body = build_comment_body(
         args.market_name,
         args.address,
         args.chain,
         verification_url,
+        simulation_url,
     )
 
     if args.output:

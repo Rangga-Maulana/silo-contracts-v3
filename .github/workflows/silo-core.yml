@@ -21,35 +21,25 @@ on:
     push:
         branches: [ master, develop ]
         paths:
-            - silo-core/**/*.sol
-            - silo-core/**/*.ts
-            - silo-core/**/*.js
-            - silo-core/**/*.json
-            - silo-oracles/**/*.sol
-            - silo-oracles/**/*.ts
-            - silo-oracles/**/*.js
-            - silo-oracles/**/*.json
-            - package.json
-            - yarn.lock
-            - gitmodules/*
-            - .gitmodules
-            - .github/workflows/silo-core.yml
+            - '**/*.sol'
+            - '.github/workflows/silo-core.yml'
+            - '.gitmodules'
+            - 'gitmodules/**'
+            - 'silo-core/deploy/input/anvil/**'
+            - 'silo-core/deploy/input/irmConfigs/**'
 
     pull_request:
         paths:
-            - silo-core/**/*.sol
-            - silo-core/**/*.ts
-            - silo-core/**/*.js
-            - silo-core/**/*.json
-            - silo-oracles/**/*.sol
-            - silo-oracles/**/*.ts
-            - silo-oracles/**/*.js
-            - silo-oracles/**/*.json
-            - package.json
-            - yarn.lock
-            - gitmodules/*
-            - .gitmodules
-            - .github/workflows/silo-core.yml
+            - '**/*.sol'
+            - '.github/workflows/silo-core.yml'
+            - '.gitmodules'
+            - 'gitmodules/**'
+            - 'silo-core/deploy/input/anvil/**'
+            - 'silo-core/deploy/input/irmConfigs/**'
+
+concurrency:
+  group: ${{ github.event_name == 'pull_request' && format('{0}-pr-{1}', github.workflow, github.event.pull_request.number) || format('{0}-ref-{1}', github.workflow, github.ref) }}
+  cancel-in-progress: true
 
 jobs:
     linters:

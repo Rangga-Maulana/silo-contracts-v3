@@ -23,6 +23,10 @@ on:
       - 'silo-core/deploy/silo/_siloDeployments.json'
       - '.github/workflows/verify-silo.yml'
 
+concurrency:
+  group: ${{ github.event_name == 'pull_request' && format('{0}-pr-{1}', github.workflow, github.event.pull_request.number) || format('{0}-ref-{1}', github.workflow, github.ref) }}
+  cancel-in-progress: true
+
 jobs:
   count-config-changes:
     runs-on: ubuntu-latest
@@ -163,13 +167,16 @@ jobs:
         run: |
           echo "Running verify script for ${{ steps.extract.outputs.CONFIG_NAME }} (${{ steps.extract.outputs.CONFIG }}) on ${{ steps.extract.outputs.CHAIN }}"
           
+          set +e  # capture exit code, do not exit on non-zero
           VERIFIER_API_KEY_SONIC=placeholder VERIFIER_URL_SONIC=https://api.sonicscan.org/api \
           FOUNDRY_PROFILE=core CONFIG=${{ steps.extract.outputs.CONFIG }} \
           EXTERNAL_PRICE_0=${{ steps.price.outputs.EXTERNAL_PRICE_0 }} EXTERNAL_PRICE_1=${{ steps.price.outputs.EXTERNAL_PRICE_1 }} \
           forge script silo-core/deploy/silo/VerifySilo.s.sol \
             --ffi --rpc-url "${{ steps.extract.outputs.RPC_URL }}" \
             -vvvv \
-            > output.log 2>&1 || true
+            > output.log 2>&1
+          VERIFY_EXIT=$?
+          set -e
 
           echo '```' > result.txt
           echo "Time: $(date -u '+%Y-%m-%d %H:%M:%S') UTC" >> result.txt
@@ -181,12 +188,21 @@ jobs:
           awk '/== Logs ==/ { print_flag = 1 } print_flag' output.log >> result.txt
           echo '```' >> result.txt
 
-      # Post result as a sticky comment on the PR
+          echo "verify_exit_code=$VERIFY_EXIT" >> $GITHUB_OUTPUT
+
+      # Post result as a sticky comment on the PR (so logs/error are visible before job fails)
       - name: Comment result on PR
         uses: marocchino/sticky-pull-request-comment@v2
         with:
           header: verify-silo
           path: result.txt
+
+      - name: Fail job if verify script failed
+        run: |
+          if [ "${{ steps.verify.outputs.verify_exit_code }}" != "0" ]; then
+            echo "::error title=Verify script failed::Verification script exited with code ${{ steps.verify.outputs.verify_exit_code }}. See the verify-silo comment above for logs."
+            exit 1
+          fi
 
       - name: Run LIVE MARKET QA
         id: live-market-qa

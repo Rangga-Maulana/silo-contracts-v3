@@ -8,6 +8,7 @@ It also sorts silo-core/deploy/silo/_siloDeployments.json (nested: chain -> silo
 
 Usage:
     python3 common/addresses/sort_addresses.py
+    python3 common/addresses/sort_addresses.py --only-common-addresses
 
 The script will:
 1. Find all .json files in common/addresses
@@ -17,6 +18,7 @@ The script will:
 5. Preserve the original formatting (indentation, etc.)
 """
 
+import argparse
 import json
 import os
 import glob
@@ -40,9 +42,10 @@ def sort_json_file(file_path: str) -> bool:
         # Sort the data alphabetically by key
         sorted_data = dict(sorted(data.items()))
         
-        # Write the sorted data back to the file with proper formatting
+        # Write the sorted data back to the file with proper formatting.
+        # ensure_ascii=False keeps UTF-8 characters (e.g. ₮) instead of \u-escapes.
         with open(file_path, 'w', encoding='utf-8') as f:
-            json.dump(sorted_data, f, indent=4, separators=(',', ': '))
+            json.dump(sorted_data, f, indent=4, separators=(',', ': '), ensure_ascii=False)
             f.write('\n')  # Add newline at the end
         
         print(f"✅ Sorted: {os.path.basename(file_path)}")
@@ -75,8 +78,9 @@ def sort_silo_deployments_file(file_path: str) -> bool:
         for chain in sorted(data.keys()):
             sorted_data[chain] = dict(sorted(data[chain].items()))
         
+        # ensure_ascii=False keeps UTF-8 characters (e.g. ₮) instead of \u-escapes.
         with open(file_path, 'w', encoding='utf-8') as f:
-            json.dump(sorted_data, f, indent=2, separators=(',', ': '))
+            json.dump(sorted_data, f, indent=2, separators=(',', ': '), ensure_ascii=False)
             f.write('\n')
         
         print(f"✅ Sorted: {os.path.basename(file_path)}")
@@ -94,6 +98,14 @@ SILO_DEPLOYMENTS_JSON = "silo-core/deploy/silo/_siloDeployments.json"
 
 def main():
     """Main function to sort all JSON files in the current directory and _siloDeployments.json."""
+    parser = argparse.ArgumentParser(description="Sort address JSON files alphabetically by key.")
+    parser.add_argument(
+        "--only-common-addresses",
+        action="store_true",
+        help="Only sort common/addresses/*.json (do not modify _siloDeployments.json).",
+    )
+    args = parser.parse_args()
+
     print("🔄 Starting address sorting process...")
     print("=" * 50)
     
@@ -104,9 +116,9 @@ def main():
     # Find all JSON files in the current directory
     json_files = glob.glob(os.path.join(current_dir, "*.json"))
     
-    # Add silo deployments file if it exists
     silo_deployments_path = os.path.join(repo_root, SILO_DEPLOYMENTS_JSON)
-    if os.path.isfile(silo_deployments_path):
+    # Add silo deployments file if present and not restricted
+    if not args.only_common_addresses and os.path.isfile(silo_deployments_path):
         json_files.append(silo_deployments_path)
     
     if not json_files:

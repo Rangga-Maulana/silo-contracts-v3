@@ -21,8 +21,6 @@ on:
       - x-silo/**/*.ts
       - x-silo/**/*.js
       - x-silo/**/*.json
-      - package.json
-      - yarn.lock
       - gitmodules/*
       - .gitmodules
       - .github/workflows/x-silo.yml
@@ -33,11 +31,13 @@ on:
       - x-silo/**/*.ts
       - x-silo/**/*.js
       - x-silo/**/*.json
-      - package.json
-      - yarn.lock
       - gitmodules/*
       - .gitmodules
       - .github/workflows/x-silo.yml
+
+concurrency:
+  group: ${{ github.event_name == 'pull_request' && format('{0}-pr-{1}', github.workflow, github.event.pull_request.number) || format('{0}-ref-{1}', github.workflow, github.ref) }}
+  cancel-in-progress: true
 
 jobs:
 

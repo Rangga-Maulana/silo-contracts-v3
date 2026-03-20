@@ -23,13 +23,11 @@ on:
             - silo-core/**/*.sol
             - silo-core/**/*.ts
             - silo-core/**/*.js
-            - silo-core/**/*.json
+            - silo-core/deployments/**/*.json
             - silo-oracles/**/*.sol
             - silo-oracles/**/*.ts
             - silo-oracles/**/*.js
-            - silo-oracles/**/*.json
-            - package.json
-            - yarn.lock
+            - silo-oracles/deployments/**/*.json
             - gitmodules/*
             - .gitmodules
             - .github/workflows/silo-deployments-checks.yml
@@ -41,16 +39,18 @@ on:
             - silo-core/**/*.sol
             - silo-core/**/*.ts
             - silo-core/**/*.js
-            - silo-core/**/*.json
+            - silo-core/deployments/**/*.json
             - silo-oracles/**/*.sol
             - silo-oracles/**/*.ts
             - silo-oracles/**/*.js
-            - silo-oracles/**/*.json
-            - package.json
-            - yarn.lock
+            - silo-oracles/deployments/**/*.json
             - gitmodules/*
             - .gitmodules
             - .github/workflows/silo-deployments-checks.yml
+
+concurrency:
+  group: ${{ github.event_name == 'pull_request' && format('{0}-pr-{1}', github.workflow, github.event.pull_request.number) || format('{0}-ref-{1}', github.workflow, github.ref) }}
+  cancel-in-progress: true
 
 jobs:
     checks:

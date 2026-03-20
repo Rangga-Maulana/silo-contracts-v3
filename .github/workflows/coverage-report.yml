@@ -17,6 +17,10 @@ on:
         type: string
         default: ''
 
+concurrency:
+  group: ${{ github.event_name == 'pull_request' && format('{0}-pr-{1}', github.workflow, github.event.pull_request.number) || format('{0}-ref-{1}', github.workflow, github.ref) }}
+  cancel-in-progress: true
+
 env:
   RPC_MAINNET: ${{ secrets.RPC_MAINNET }}
   RPC_ARBITRUM: ${{ secrets.RPC_ARBITRUM }}

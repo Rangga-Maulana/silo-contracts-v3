@@ -22,16 +22,17 @@ import {PendleWrapperLPTToSyOracleFactoryDeploy} from "./pendle/PendleWrapperLPT
 import {PTLinearOracleFactoryDeploy} from "./pendle/PTLinearOracleFactoryDeploy.s.sol";
 
 import {ManageableOracleFactoryDeploy} from "./manageable/ManageableOracleFactoryDeploy.s.sol";
+import {CustomMethodOracleFactoryDeploy} from "./custom-method/CustomMethodOracleFactoryDeploy.s.sol";
 import {SiloVirtualAsset8DecimalsDeploy} from "./SiloVirtualAsset8DecimalsDeploy.s.sol";
 import {WstEthToStEthAdapterMainnetDeploy} from "./WstEthToStEthAdapterMainnetDeploy.sol";
 
 /*
     FOUNDRY_PROFILE=oracles \
-        forge script silo-oracles/deploy/MainnetDeploy.s.sol \
+        forge script silo-oracles/deploy/OracleMainnetDeploy.s.sol \
         --ffi --rpc-url $RPC_SONIC --broadcast --verify
 
     FOUNDRY_PROFILE=oracles \
-        forge script silo-oracles/deploy/MainnetDeploy.s.sol \
+        forge script silo-oracles/deploy/OracleMainnetDeploy.s.sol \
         --ffi --rpc-url $RPC_INJECTIVE \
         --verify \
         --verifier blockscout \
@@ -39,7 +40,7 @@ import {WstEthToStEthAdapterMainnetDeploy} from "./WstEthToStEthAdapterMainnetDe
         --private-key $PRIVATE_KEY \
         --resume
 */
-contract MainnetDeploy is CommonDeploy {
+contract OracleMainnetDeploy is CommonDeploy {
     function run() public {
         OracleForwarderFactoryDeploy oracleForwarderFactoryDeploy = new OracleForwarderFactoryDeploy();
         ChainlinkV3OracleFactoryDeploy chainlinkV3OracleFactoryDeploy = new ChainlinkV3OracleFactoryDeploy();
@@ -59,6 +60,7 @@ contract MainnetDeploy is CommonDeploy {
         PTLinearOracleFactoryDeploy ptLinearOracleFactoryDeploy = new PTLinearOracleFactoryDeploy();
 
         ManageableOracleFactoryDeploy manageableOracleFactoryDeploy = new ManageableOracleFactoryDeploy();
+        CustomMethodOracleFactoryDeploy customMethodOracleFactoryDeploy = new CustomMethodOracleFactoryDeploy();
         SiloVirtualAsset8DecimalsDeploy siloVirtualAsset8DecimalsDeploy = new SiloVirtualAsset8DecimalsDeploy();
         WstEthToStEthAdapterMainnetDeploy wstEthToStEthAdapterMainnetDeploy = new WstEthToStEthAdapterMainnetDeploy();
 
@@ -78,6 +80,7 @@ contract MainnetDeploy is CommonDeploy {
         }
 
         manageableOracleFactoryDeploy.run();
+        customMethodOracleFactoryDeploy.run();
 
         oracleForwarderFactoryDeploy.run();
         oracleScalerFactoryDeploy.run();

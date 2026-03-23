@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-03-23 17:07:56</td>
+            <td class="headerValue">2026-03-23 17:31:57</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryLo">66.7&nbsp;%</td>
@@ -102,18 +102,18 @@
 <span id="L40"><span class="lineNum">      40</span>              :     /// @param _priceDecimals decimals of the uint256 returned by the external price method.</span>
 <span id="L41"><span class="lineNum">      41</span>              :     /// @return normalizationDivider used when `_normalizationMultiplier == 0` (divide path).</span>
 <span id="L42"><span class="lineNum">      42</span>              :     /// @return normalizationMultiplier used when non-zero (multiply path); both are never non-zero at once.</span>
-<span id="L43"><span class="lineNum">      43</span> <span class="tlaGNC tlaBgGNC">          12 :     function calculateNormalizationData(uint8 _baseDecimals, uint8 _priceDecimals)</span></span>
+<span id="L43"><span class="lineNum">      43</span> <span class="tlaGNC tlaBgGNC">          15 :     function calculateNormalizationData(uint8 _baseDecimals, uint8 _priceDecimals)</span></span>
 <span id="L44"><span class="lineNum">      44</span>              :         internal</span>
 <span id="L45"><span class="lineNum">      45</span>              :         pure</span>
 <span id="L46"><span class="lineNum">      46</span>              :         returns (uint256 normalizationDivider, uint256 normalizationMultiplier)</span>
 <span id="L47"><span class="lineNum">      47</span>              :     {</span>
-<span id="L48"><span class="lineNum">      48</span> <span class="tlaGNC">          12 :         uint256 sum = uint256(_baseDecimals) + uint256(_priceDecimals);</span></span>
-<span id="L49"><span class="lineNum">      49</span> <span class="tlaGNC">          12 :         require(sum &lt;= 36, NormalizationScaleTooLarge());</span></span>
+<span id="L48"><span class="lineNum">      48</span> <span class="tlaGNC">          15 :         uint256 sum = uint256(_baseDecimals) + uint256(_priceDecimals);</span></span>
+<span id="L49"><span class="lineNum">      49</span> <span class="tlaGNC">          15 :         require(sum &lt;= 36, NormalizationScaleTooLarge());</span></span>
 <span id="L50"><span class="lineNum">      50</span>              : </span>
-<span id="L51"><span class="lineNum">      51</span> <span class="tlaGNC">          12 :         if (sum &gt; 18) {</span></span>
+<span id="L51"><span class="lineNum">      51</span> <span class="tlaGNC">          15 :         if (sum &gt; 18) {</span></span>
 <span id="L52"><span class="lineNum">      52</span> <span class="tlaUNC tlaBgUNC">           0 :             normalizationDivider = 10 ** (sum - 18);</span></span>
 <span id="L53"><span class="lineNum">      53</span>              :         } else {</span>
-<span id="L54"><span class="lineNum">      54</span> <span class="tlaGNC tlaBgGNC">          12 :             normalizationMultiplier = 10 ** (18 - sum);</span></span>
+<span id="L54"><span class="lineNum">      54</span> <span class="tlaGNC tlaBgGNC">          15 :             normalizationMultiplier = 10 ** (18 - sum);</span></span>
 <span id="L55"><span class="lineNum">      55</span>              :         }</span>
 <span id="L56"><span class="lineNum">      56</span>              :     }</span>
 <span id="L57"><span class="lineNum">      57</span>              : </span>

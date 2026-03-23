@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-03-23 17:07:56</td>
+            <td class="headerValue">2026-03-23 17:31:57</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -75,26 +75,26 @@
 <span id="L13"><span class="lineNum">      13</span>              :     address internal immutable _TARGET; // solhint-disable-line var-name-mixedcase</span>
 <span id="L14"><span class="lineNum">      14</span>              :     bytes4 internal immutable _CALL_SELECTOR; // solhint-disable-line var-name-mixedcase</span>
 <span id="L15"><span class="lineNum">      15</span>              : </span>
-<span id="L16"><span class="lineNum">      16</span> <span class="tlaGNC tlaBgGNC">          12 :     constructor(</span></span>
+<span id="L16"><span class="lineNum">      16</span> <span class="tlaGNC tlaBgGNC">          14 :     constructor(</span></span>
 <span id="L17"><span class="lineNum">      17</span>              :         ICustomMethodOracle.DeploymentConfig memory _config,</span>
 <span id="L18"><span class="lineNum">      18</span>              :         uint256 _normalizationDivider,</span>
 <span id="L19"><span class="lineNum">      19</span>              :         uint256 _normalizationMultiplier</span>
 <span id="L20"><span class="lineNum">      20</span>              :     ) {</span>
-<span id="L21"><span class="lineNum">      21</span> <span class="tlaGNC">          12 :         _BASE_TOKEN = _config.baseToken;</span></span>
-<span id="L22"><span class="lineNum">      22</span> <span class="tlaGNC">          12 :         _QUOTE_TOKEN = _config.quoteToken;</span></span>
-<span id="L23"><span class="lineNum">      23</span> <span class="tlaGNC">          12 :         _NORMALIZATION_DIVIDER = _normalizationDivider;</span></span>
-<span id="L24"><span class="lineNum">      24</span> <span class="tlaGNC">          12 :         _NORMALIZATION_MULTIPLIER = _normalizationMultiplier;</span></span>
-<span id="L25"><span class="lineNum">      25</span> <span class="tlaGNC">          12 :         _TARGET = _config.target;</span></span>
-<span id="L26"><span class="lineNum">      26</span> <span class="tlaGNC">          12 :         _CALL_SELECTOR = _config.callSelector;</span></span>
+<span id="L21"><span class="lineNum">      21</span> <span class="tlaGNC">          14 :         _BASE_TOKEN = _config.baseToken;</span></span>
+<span id="L22"><span class="lineNum">      22</span> <span class="tlaGNC">          14 :         _QUOTE_TOKEN = _config.quoteToken;</span></span>
+<span id="L23"><span class="lineNum">      23</span> <span class="tlaGNC">          14 :         _NORMALIZATION_DIVIDER = _normalizationDivider;</span></span>
+<span id="L24"><span class="lineNum">      24</span> <span class="tlaGNC">          14 :         _NORMALIZATION_MULTIPLIER = _normalizationMultiplier;</span></span>
+<span id="L25"><span class="lineNum">      25</span> <span class="tlaGNC">          14 :         _TARGET = _config.target;</span></span>
+<span id="L26"><span class="lineNum">      26</span> <span class="tlaGNC">          14 :         _CALL_SELECTOR = _config.callSelector;</span></span>
 <span id="L27"><span class="lineNum">      27</span>              :     }</span>
 <span id="L28"><span class="lineNum">      28</span>              : </span>
-<span id="L29"><span class="lineNum">      29</span> <span class="tlaGNC">          20 :     function getConfig() external view returns (ICustomMethodOracle.OracleConfig memory _cfg) {</span></span>
-<span id="L30"><span class="lineNum">      30</span> <span class="tlaGNC">          20 :         _cfg.baseToken = address(_BASE_TOKEN);</span></span>
-<span id="L31"><span class="lineNum">      31</span> <span class="tlaGNC">          20 :         _cfg.quoteToken = address(_QUOTE_TOKEN);</span></span>
-<span id="L32"><span class="lineNum">      32</span> <span class="tlaGNC">          20 :         _cfg.target = _TARGET;</span></span>
-<span id="L33"><span class="lineNum">      33</span> <span class="tlaGNC">          20 :         _cfg.callSelector = _CALL_SELECTOR;</span></span>
-<span id="L34"><span class="lineNum">      34</span> <span class="tlaGNC">          20 :         _cfg.normalizationDivider = _NORMALIZATION_DIVIDER;</span></span>
-<span id="L35"><span class="lineNum">      35</span> <span class="tlaGNC">          20 :         _cfg.normalizationMultiplier = _NORMALIZATION_MULTIPLIER;</span></span>
+<span id="L29"><span class="lineNum">      29</span> <span class="tlaGNC">          23 :     function getConfig() external view returns (ICustomMethodOracle.OracleConfig memory _cfg) {</span></span>
+<span id="L30"><span class="lineNum">      30</span> <span class="tlaGNC">          23 :         _cfg.baseToken = address(_BASE_TOKEN);</span></span>
+<span id="L31"><span class="lineNum">      31</span> <span class="tlaGNC">          23 :         _cfg.quoteToken = address(_QUOTE_TOKEN);</span></span>
+<span id="L32"><span class="lineNum">      32</span> <span class="tlaGNC">          23 :         _cfg.target = _TARGET;</span></span>
+<span id="L33"><span class="lineNum">      33</span> <span class="tlaGNC">          23 :         _cfg.callSelector = _CALL_SELECTOR;</span></span>
+<span id="L34"><span class="lineNum">      34</span> <span class="tlaGNC">          23 :         _cfg.normalizationDivider = _NORMALIZATION_DIVIDER;</span></span>
+<span id="L35"><span class="lineNum">      35</span> <span class="tlaGNC">          23 :         _cfg.normalizationMultiplier = _NORMALIZATION_MULTIPLIER;</span></span>
 <span id="L36"><span class="lineNum">      36</span>              :     }</span>
 <span id="L37"><span class="lineNum">      37</span>              : }</span>
         </pre>

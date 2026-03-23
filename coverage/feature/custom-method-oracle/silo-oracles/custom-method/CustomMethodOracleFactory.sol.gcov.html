@@ -31,18 +31,18 @@
             <td class="headerValue">lcov.info</td>
             <td></td>
             <td class="headerItem">Lines:</td>
-            <td class="headerCovTableEntryHi">95.5&nbsp;%</td>
+            <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
             <td class="headerCovTableEntry">22</td>
-            <td class="headerCovTableEntry">21</td>
+            <td class="headerCovTableEntry">22</td>
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-03-23 17:07:56</td>
+            <td class="headerValue">2026-03-23 17:31:57</td>
             <td></td>
             <td class="headerItem">Functions:</td>
-            <td class="headerCovTableEntryMed">80.0&nbsp;%</td>
+            <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
             <td class="headerCovTableEntry">5</td>
-            <td class="headerCovTableEntry">4</td>
+            <td class="headerCovTableEntry">5</td>
           </tr>
                   <tr><td><img src="../glass.png" width=3 height=3 alt=""></td></tr>
                 </table>
@@ -76,31 +76,31 @@
 <span id="L14"><span class="lineNum">      14</span>              : contract CustomMethodOracleFactory is Create2Factory, ICustomMethodOracleFactory {</span>
 <span id="L15"><span class="lineNum">      15</span>              :     address public immutable ORACLE_IMPLEMENTATION; // solhint-disable-line var-name-mixedcase</span>
 <span id="L16"><span class="lineNum">      16</span>              : </span>
-<span id="L17"><span class="lineNum">      17</span> <span class="tlaGNC tlaBgGNC">          12 :     constructor() {</span></span>
-<span id="L18"><span class="lineNum">      18</span> <span class="tlaGNC">          12 :         ORACLE_IMPLEMENTATION = address(new CustomMethodOracle());</span></span>
+<span id="L17"><span class="lineNum">      17</span> <span class="tlaGNC tlaBgGNC">          15 :     constructor() {</span></span>
+<span id="L18"><span class="lineNum">      18</span> <span class="tlaGNC">          15 :         ORACLE_IMPLEMENTATION = address(new CustomMethodOracle());</span></span>
 <span id="L19"><span class="lineNum">      19</span>              :     }</span>
 <span id="L20"><span class="lineNum">      20</span>              : </span>
 <span id="L21"><span class="lineNum">      21</span>              :     /// @inheritdoc ICustomMethodOracleFactory</span>
-<span id="L22"><span class="lineNum">      22</span> <span class="tlaGNC">          13 :     function create(ICustomMethodOracle.DeploymentConfig memory _config, bytes32 _externalSalt)</span></span>
+<span id="L22"><span class="lineNum">      22</span> <span class="tlaGNC">          15 :     function create(ICustomMethodOracle.DeploymentConfig memory _config, bytes32 _externalSalt)</span></span>
 <span id="L23"><span class="lineNum">      23</span>              :         external</span>
 <span id="L24"><span class="lineNum">      24</span>              :         virtual</span>
 <span id="L25"><span class="lineNum">      25</span>              :         returns (ICustomMethodOracle oracle)</span>
 <span id="L26"><span class="lineNum">      26</span>              :     {</span>
-<span id="L27"><span class="lineNum">      27</span> <span class="tlaGNC">          13 :         (uint256 normalizationDivider, uint256 normalizationMultiplier) = verifyConfig(_config);</span></span>
+<span id="L27"><span class="lineNum">      27</span> <span class="tlaGNC">          15 :         (uint256 normalizationDivider, uint256 normalizationMultiplier) = verifyConfig(_config);</span></span>
 <span id="L28"><span class="lineNum">      28</span>              : </span>
-<span id="L29"><span class="lineNum">      29</span> <span class="tlaGNC">          12 :         CustomMethodOracleConfig oracleConfig = new CustomMethodOracleConfig({</span></span>
+<span id="L29"><span class="lineNum">      29</span> <span class="tlaGNC">          14 :         CustomMethodOracleConfig oracleConfig = new CustomMethodOracleConfig({</span></span>
 <span id="L30"><span class="lineNum">      30</span>              :             _config: _config,</span>
 <span id="L31"><span class="lineNum">      31</span>              :             _normalizationDivider: normalizationDivider,</span>
 <span id="L32"><span class="lineNum">      32</span>              :             _normalizationMultiplier: normalizationMultiplier</span>
 <span id="L33"><span class="lineNum">      33</span>              :         });</span>
 <span id="L34"><span class="lineNum">      34</span>              : </span>
-<span id="L35"><span class="lineNum">      35</span> <span class="tlaGNC">          12 :         oracle = ICustomMethodOracle(</span></span>
+<span id="L35"><span class="lineNum">      35</span> <span class="tlaGNC">          14 :         oracle = ICustomMethodOracle(</span></span>
 <span id="L36"><span class="lineNum">      36</span>              :             Clones.cloneDeterministic({ implementation: ORACLE_IMPLEMENTATION, salt: _salt(_externalSalt) })</span>
 <span id="L37"><span class="lineNum">      37</span>              :         );</span>
 <span id="L38"><span class="lineNum">      38</span>              : </span>
-<span id="L39"><span class="lineNum">      39</span> <span class="tlaGNC">          12 :         oracle.initialize(address(oracleConfig));</span></span>
+<span id="L39"><span class="lineNum">      39</span> <span class="tlaGNC">          14 :         oracle.initialize(address(oracleConfig));</span></span>
 <span id="L40"><span class="lineNum">      40</span>              : </span>
-<span id="L41"><span class="lineNum">      41</span> <span class="tlaGNC">           9 :         emit ICustomMethodOracle.CustomMethodConfigDeployed(address(oracleConfig));</span></span>
+<span id="L41"><span class="lineNum">      41</span> <span class="tlaGNC">          11 :         emit ICustomMethodOracle.CustomMethodConfigDeployed(address(oracleConfig));</span></span>
 <span id="L42"><span class="lineNum">      42</span>              :     }</span>
 <span id="L43"><span class="lineNum">      43</span>              : </span>
 <span id="L44"><span class="lineNum">      44</span>              :     /// @inheritdoc ICustomMethodOracleFactory</span>
@@ -117,35 +117,35 @@
 <span id="L55"><span class="lineNum">      55</span>              :     }</span>
 <span id="L56"><span class="lineNum">      56</span>              : </span>
 <span id="L57"><span class="lineNum">      57</span>              :     /// @inheritdoc ICustomMethodOracleFactory</span>
-<span id="L58"><span class="lineNum">      58</span> <span class="tlaUNC tlaBgUNC">           0 :     function verifyConfig(ICustomMethodOracle.DeploymentConfig memory _config)</span></span>
+<span id="L58"><span class="lineNum">      58</span> <span class="tlaGNC">           6 :     function verifyConfig(ICustomMethodOracle.DeploymentConfig memory _config)</span></span>
 <span id="L59"><span class="lineNum">      59</span>              :         public</span>
 <span id="L60"><span class="lineNum">      60</span>              :         view</span>
 <span id="L61"><span class="lineNum">      61</span>              :         virtual</span>
 <span id="L62"><span class="lineNum">      62</span>              :         override</span>
 <span id="L63"><span class="lineNum">      63</span>              :         returns (uint256 normalizationDivider, uint256 normalizationMultiplier)</span>
 <span id="L64"><span class="lineNum">      64</span>              :     {</span>
-<span id="L65"><span class="lineNum">      65</span> <span class="tlaGNC tlaBgGNC">          13 :         require(address(_config.baseToken) != address(0), ICustomMethodOracle.AddressZero());</span></span>
-<span id="L66"><span class="lineNum">      66</span> <span class="tlaGNC">          13 :         require(address(_config.quoteToken) != address(0), ICustomMethodOracle.AddressZero());</span></span>
-<span id="L67"><span class="lineNum">      67</span> <span class="tlaGNC">          13 :         require(_config.target != address(0), ICustomMethodOracle.AddressZero());</span></span>
-<span id="L68"><span class="lineNum">      68</span> <span class="tlaGNC">          13 :         require(address(_config.baseToken) != address(_config.quoteToken), ICustomMethodOracle.TokensAreTheSame());</span></span>
+<span id="L65"><span class="lineNum">      65</span> <span class="tlaGNC">          21 :         require(address(_config.baseToken) != address(0), ICustomMethodOracle.AddressZero());</span></span>
+<span id="L66"><span class="lineNum">      66</span> <span class="tlaGNC">          20 :         require(address(_config.quoteToken) != address(0), ICustomMethodOracle.AddressZero());</span></span>
+<span id="L67"><span class="lineNum">      67</span> <span class="tlaGNC">          19 :         require(_config.target != address(0), ICustomMethodOracle.AddressZero());</span></span>
+<span id="L68"><span class="lineNum">      68</span> <span class="tlaGNC">          18 :         require(address(_config.baseToken) != address(_config.quoteToken), ICustomMethodOracle.TokensAreTheSame());</span></span>
 <span id="L69"><span class="lineNum">      69</span>              : </span>
-<span id="L70"><span class="lineNum">      70</span> <span class="tlaGNC">          13 :         require(_config.callSelector != bytes4(0), ICustomMethodOracle.EmptyCallSelector());</span></span>
+<span id="L70"><span class="lineNum">      70</span> <span class="tlaGNC">          17 :         require(_config.callSelector != bytes4(0), ICustomMethodOracle.EmptyCallSelector());</span></span>
 <span id="L71"><span class="lineNum">      71</span>              : </span>
-<span id="L72"><span class="lineNum">      72</span> <span class="tlaGNC">          13 :         (normalizationDivider, normalizationMultiplier) = OracleNormalization.calculateNormalizationData({</span></span>
+<span id="L72"><span class="lineNum">      72</span> <span class="tlaGNC">          16 :         (normalizationDivider, normalizationMultiplier) = OracleNormalization.calculateNormalizationData({</span></span>
 <span id="L73"><span class="lineNum">      73</span>              :             _baseDecimals: _baseTokenDecimals(_config),</span>
 <span id="L74"><span class="lineNum">      74</span>              :             _priceDecimals: _config.priceDecimals</span>
 <span id="L75"><span class="lineNum">      75</span>              :         });</span>
 <span id="L76"><span class="lineNum">      76</span>              :     }</span>
 <span id="L77"><span class="lineNum">      77</span>              : </span>
-<span id="L78"><span class="lineNum">      78</span> <span class="tlaGNC">          13 :     function _baseTokenDecimals(ICustomMethodOracle.DeploymentConfig memory _config)</span></span>
+<span id="L78"><span class="lineNum">      78</span> <span class="tlaGNC">          16 :     function _baseTokenDecimals(ICustomMethodOracle.DeploymentConfig memory _config)</span></span>
 <span id="L79"><span class="lineNum">      79</span>              :         internal</span>
 <span id="L80"><span class="lineNum">      80</span>              :         view</span>
 <span id="L81"><span class="lineNum">      81</span>              :         returns (uint8 baseDecimals)</span>
 <span id="L82"><span class="lineNum">      82</span>              :     {</span>
-<span id="L83"><span class="lineNum">      83</span> <span class="tlaGNC">          13 :         uint256 decimals = TokenHelper.assertAndGetDecimals(address(_config.baseToken));</span></span>
-<span id="L84"><span class="lineNum">      84</span> <span class="tlaGNC">          13 :         require(decimals &lt;= 18, ICustomMethodOracle.BaseTokenDecimalsAbove18());</span></span>
+<span id="L83"><span class="lineNum">      83</span> <span class="tlaGNC">          16 :         uint256 decimals = TokenHelper.assertAndGetDecimals(address(_config.baseToken));</span></span>
+<span id="L84"><span class="lineNum">      84</span> <span class="tlaGNC">          16 :         require(decimals &lt;= 18, ICustomMethodOracle.BaseTokenDecimalsAbove18());</span></span>
 <span id="L85"><span class="lineNum">      85</span>              :         // forge-lint: disable-next-line(unsafe-typecast)</span>
-<span id="L86"><span class="lineNum">      86</span> <span class="tlaGNC">          12 :         baseDecimals = uint8(decimals);</span></span>
+<span id="L86"><span class="lineNum">      86</span> <span class="tlaGNC">          15 :         baseDecimals = uint8(decimals);</span></span>
 <span id="L87"><span class="lineNum">      87</span>              :     }</span>
 <span id="L88"><span class="lineNum">      88</span>              : }</span>
         </pre>

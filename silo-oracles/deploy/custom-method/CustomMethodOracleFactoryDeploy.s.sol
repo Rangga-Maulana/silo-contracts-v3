@@ -9,7 +9,17 @@ import {ICustomMethodOracleFactory} from "silo-oracles/contracts/interfaces/ICus
 /*
 FOUNDRY_PROFILE=oracles \
     forge script silo-oracles/deploy/custom-method/CustomMethodOracleFactoryDeploy.s.sol \
-    --ffi --rpc-url $RPC_SONIC --broadcast --verify
+    --ffi --rpc-url $RPC_INJECTIVE --broadcast --verify
+
+    resume verification:
+    FOUNDRY_PROFILE=oracles \
+        forge script silo-oracles/deploy/custom-method/CustomMethodOracleFactoryDeploy.s.sol \
+        --ffi --rpc-url https://injective.cloud.blockscout.com/api/eth-rpc \
+        --verify \
+        --verifier blockscout \
+        --verifier-url https://injective.cloud.blockscout.com/api/ \
+        --private-key $PRIVATE_KEY \
+        --resume
  */
 contract CustomMethodOracleFactoryDeploy is CommonDeploy {
     function run() public returns (ICustomMethodOracleFactory factory) {

@@ -84,7 +84,10 @@ CHAIN_EXPLORERS: dict[str, list[tuple[str, str]]] = {
         ("etherscan", "https://api.snowtrace.io/api"),
     ],
     "base": [("default", "https://api.etherscan.io/v2/api?chainid=8453")],
-    "injective": [("default", "https://blockscout-api.injective.network/api")],
+    "injective": [
+        ("blockscout", "https://blockscout-api.injective.network/api"),
+        ("cloud", "https://injective.cloud.blockscout.com/api"),
+    ],
     "bnb": [("default", "https://api.etherscan.io/v2/api?chainid=56")],
     "mainnet": [("default", "https://api.etherscan.io/v2/api?chainid=1")],
     "optimism": [("default", "https://api.etherscan.io/v2/api?chainid=10")],
@@ -96,18 +99,20 @@ CHAIN_EXPLORERS: dict[str, list[tuple[str, str]]] = {
 # Chains that have explorer config (for --chain all; excludes e.g. ink)
 VERIFICATION_SUPPORTED_CHAINS = sorted(CHAIN_EXPLORERS.keys())
 
-# Block explorer address URL for PR comment links (display_label -> base URL)
+# Block explorer address URL for PR comment links (stable key -> base URL).
+# Use "chain" for default explorer and "chain explorer_label" for non-default explorers.
 EXPLORER_ADDRESS_URL: dict[str, str] = {
-    "Arbitrum": "https://arbiscan.io/address/",
-    "Avalanche (routescan)": "https://snowtrace.io/address/",
-    "Avalanche (etherscan)": "https://snowscan.xyz/address/",
-    "Base": "https://basescan.org/address/",
-    "BNB": "https://bscscan.com/address/",
-    "Injective": "https://blockscout.injective.network/address/",
-    "Mainnet": "https://etherscan.io/address/",
-    "Optimism": "https://optimistic.etherscan.io/address/",
-    "OKX": "https://www.oklink.com/x-layer/address/",
-    "Sonic": "https://sonicscan.org/address/",
+    "arbitrum_one": "https://arbiscan.io/address/",
+    "avalanche routescan": "https://snowscan.xyz/address/",
+    "avalanche etherscan": "https://snowtrace.io/address/",
+    "base": "https://basescan.org/address/",
+    "bnb": "https://bscscan.com/address/",
+    "injective blockscout": "https://blockscout.injective.network/address/",
+    "injective cloud": "https://injective.cloud.blockscout.com/address/",
+    "mainnet": "https://etherscan.io/address/",
+    "optimism": "https://optimistic.etherscan.io/address/",
+    "okx": "https://www.oklink.com/x-layer/address/",
+    "sonic": "https://sonicscan.org/address/",
 }
 
 # Display names for PR comment output
@@ -124,6 +129,17 @@ CHAIN_DISPLAY_NAMES: dict[str, str] = {
 }
 
 USER_AGENT = "Mozilla/5.0 (compatible; explorer-api-verify-checker/1.0)"
+
+
+def explorer_key(chain: str, explorer_label: str) -> str:
+    return chain if explorer_label == "default" else f"{chain} {explorer_label}"
+
+
+def explorer_display_label(chain: str, explorer_label: str, explorers_count: int) -> str:
+    display_label = CHAIN_DISPLAY_NAMES.get(chain, chain)
+    if explorers_count > 1 and explorer_label != "default":
+        return f"{display_label} ({explorer_label})"
+    return display_label
 
 
 @dataclass(frozen=True)
@@ -503,8 +519,11 @@ def main() -> int:
     repo_root = Path(__file__).resolve().parents[1]
     unverified: list[tuple[str, str, ContractEntry]] = []
     errors: list[tuple[str, str, ContractEntry]] = []
-    # Per chain: (display_label, verified, not_verified, fetch_errors, chain_unverified, chain_errors, config_error?)
-    summary_per_chain: list[tuple[str, int, int, int, list[ContractEntry], list[ContractEntry], str | None]] = []
+    # Per chain+explorer:
+    # (summary_key, display_label, verified, not_verified, fetch_errors, chain_unverified, chain_errors, config_error?)
+    summary_per_chain: list[
+        tuple[str, str, int, int, int, list[ContractEntry], list[ContractEntry], str | None]
+    ] = []
     output_file = getattr(args, "output_unverified_file", None)
 
     try:
@@ -530,14 +549,14 @@ def main() -> int:
             except ValueError as e:
                 print(str(e), file=sys.stderr)
                 has_failures = True
-                display_label = CHAIN_DISPLAY_NAMES.get(chain, chain)
-                summary_per_chain.append((display_label, 0, 0, 0, [], [], str(e)))
+                display_label = explorer_display_label(chain, "default", explorers_count=1)
+                summary_per_chain.append((chain, display_label, 0, 0, 0, [], [], str(e)))
                 continue
 
             contracts = collect_contracts(repo_root, chain, components)
             if not contracts:
-                display_label = CHAIN_DISPLAY_NAMES.get(chain, chain)
-                summary_per_chain.append((display_label, 0, 0, 0, [], [], "No deployments found for this chain."))
+                display_label = explorer_display_label(chain, "default", explorers_count=1)
+                summary_per_chain.append((chain, display_label, 0, 0, 0, [], [], "No deployments found for this chain."))
                 continue
 
             for explorer_label, api_url in explorer_configs:
@@ -602,15 +621,24 @@ def main() -> int:
                 if not_verified_count > 0 or fetch_error_count > 0:
                     has_failures = True
 
-                summary_label = f"{chain} {explorer_label}" if len(explorer_configs) > 1 else chain
-                display_label = CHAIN_DISPLAY_NAMES.get(chain, chain)
-                if explorer_label != "default":
-                    display_label = f"{display_label} ({explorer_label})"
-                summary_per_chain.append((display_label, verified_count, not_verified_count, fetch_error_count, chain_unverified, chain_errors, None))
+                summary_key = explorer_key(chain, explorer_label)
+                display_label = explorer_display_label(chain, explorer_label, len(explorer_configs))
+                summary_per_chain.append(
+                    (
+                        summary_key,
+                        display_label,
+                        verified_count,
+                        not_verified_count,
+                        fetch_error_count,
+                        chain_unverified,
+                        chain_errors,
+                        None,
+                    )
+                )
 
                 # Summary on new lines with clear formatting
                 print()
-                print(f"Summary [{summary_label}]:")
+                print(f"Summary [{summary_key}]:")
                 print(f"  Verified:     {verified_count}")
                 print(f"  Not verified: {not_verified_count}")
                 print(f"  Fetch errors: {fetch_error_count}")
@@ -663,7 +691,9 @@ def main() -> int:
 
 def _format_report_for_comment(
     unverified: list[tuple[str, str, ContractEntry]],
-    summary_per_chain: list[tuple[str, int, int, int, list[ContractEntry], str | None]],
+    summary_per_chain: list[
+        tuple[str, str, int, int, int, list[ContractEntry], list[ContractEntry], str | None]
+    ],
     repo_root: Path,
 ) -> str:
     """Format full report for PR comment: sections per chain with unverified list under each."""
@@ -676,13 +706,13 @@ def _format_report_for_comment(
     # If all contracts are verified across all chains (no config errors), show a single success message
     all_verified = all(
         config_error is None and not_verified == 0 and fetch_errors == 0
-        for _, _, not_verified, fetch_errors, _, _, config_error in summary_per_chain
+        for _, _, _, not_verified, fetch_errors, _, _, config_error in summary_per_chain
     )
     if all_verified:
         lines.append("All deployment contracts are verified on block explorers.")
         return "\n".join(lines)
 
-    for chain_label, verified, not_verified, fetch_errors, chain_unverified, chain_errors, config_error in summary_per_chain:
+    for summary_key, chain_label, verified, not_verified, fetch_errors, chain_unverified, chain_errors, config_error in summary_per_chain:
         if config_error is None and not_verified == 0 and fetch_errors == 0:
             lines.append(f"**{chain_label}: all {verified} contracts verified.**")
         elif config_error is not None:
@@ -702,7 +732,7 @@ def _format_report_for_comment(
                 for c in chain_unverified:
                     path = find_contract_source_path(repo_root, c.component, c.contract_name)
                     path_display = path if path else f"{c.component}/{c.contract_name}"
-                    base_url = EXPLORER_ADDRESS_URL.get(chain_label, "")
+                    base_url = EXPLORER_ADDRESS_URL.get(summary_key, "")
                     addr_link = f"[`{c.address}`]({base_url}{c.address})" if base_url else f"`{c.address}`"
                     lines.append(f"- `{path_display}` {addr_link}")
                 lines.append("")
@@ -712,7 +742,7 @@ def _format_report_for_comment(
                 for c in chain_errors:
                     path = find_contract_source_path(repo_root, c.component, c.contract_name)
                     path_display = path if path else f"{c.component}/{c.contract_name}"
-                    base_url = EXPLORER_ADDRESS_URL.get(chain_label, "")
+                    base_url = EXPLORER_ADDRESS_URL.get(summary_key, "")
                     addr_link = f"[`{c.address}`]({base_url}{c.address})" if base_url else f"`{c.address}`"
                     lines.append(f"- `{path_display}` {addr_link}")
                 lines.append("")
@@ -736,13 +766,16 @@ def _contract_to_dict(c: ContractEntry, repo_root: Path) -> dict[str, str]:
 
 def _write_json_artifact(
     path: str,
-    summary_per_chain: list[tuple[str, int, int, int, list[ContractEntry], list[ContractEntry], str | None]],
+    summary_per_chain: list[
+        tuple[str, str, int, int, int, list[ContractEntry], list[ContractEntry], str | None]
+    ],
     repo_root: Path,
 ) -> None:
     """Write per-chain result as JSON for CI matrix merge."""
     sections = []
-    for display_label, verified, not_verified, fetch_errors, chain_unverified, chain_errors, config_error in summary_per_chain:
+    for summary_key, display_label, verified, not_verified, fetch_errors, chain_unverified, chain_errors, config_error in summary_per_chain:
         sections.append({
+            "summary_key": summary_key,
             "display_label": display_label,
             "verified": verified,
             "not_verified": not_verified,
@@ -758,7 +791,9 @@ def _write_json_artifact(
 def _write_unverified_file(
     path: str,
     unverified: list[tuple[str, str, ContractEntry]],
-    summary_per_chain: list[tuple[str, int, int, int, list[ContractEntry], str | None]],
+    summary_per_chain: list[
+        tuple[str, str, int, int, int, list[ContractEntry], list[ContractEntry], str | None]
+    ],
     error_msg: str | None = None,
     repo_root: Path | None = None,
 ) -> None:

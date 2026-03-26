@@ -2,7 +2,6 @@
 pragma solidity 0.8.28;
 
 import {console2} from "forge-std/console2.sol";
-import {Test} from "forge-std/Test.sol";
 
 import {ChainsLib} from "silo-foundry-utils/lib/ChainsLib.sol";
 import {AddrLib} from "silo-foundry-utils/lib/AddrLib.sol";
@@ -21,8 +20,6 @@ import {GaugeHookReceiver} from "silo-core/contracts/hooks/gauge/GaugeHookReceiv
 import {IShareToken} from "silo-core/contracts/interfaces/IShareToken.sol";
 import {Utils} from "silo-core/deploy/silo/verifier/Utils.sol";
 import {IWrappedNativeToken} from "silo-core/contracts/interfaces/IWrappedNativeToken.sol";
-
-import {IBankModule} from "../_common/IBankModule.sol";
 import {InjectiveWorkaround} from "../_common/InjectiveWorkaround.sol";
 
 interface OldGauge {

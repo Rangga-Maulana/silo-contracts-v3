@@ -26,6 +26,9 @@ import {CustomMethodOracleFactoryDeploy} from "./custom-method/CustomMethodOracl
 import {SiloVirtualAsset8DecimalsDeploy} from "./SiloVirtualAsset8DecimalsDeploy.s.sol";
 import {WstEthToStEthAdapterMainnetDeploy} from "./WstEthToStEthAdapterMainnetDeploy.sol";
 
+import {VirtualTokenPricesDeploy} from "./VirtualTokenPricesDeploy.s.sol";
+import {SiloVirtualAssetsDeploy} from "./SiloVirtualAssetsDeploy.s.sol";
+
 /*
     FOUNDRY_PROFILE=oracles \
         forge script silo-oracles/deploy/OracleMainnetDeploy.s.sol \
@@ -99,5 +102,11 @@ contract OracleMainnetDeploy is CommonDeploy {
         // wstEthToStEthAdapterMainnetDeploy.run();
 
         // UniswapV3 oracle deploy scripts are pinned to solc 0.7.6 and must be run separately.
+
+        VirtualTokenPricesDeploy virtualTokenPricesDeploy = new VirtualTokenPricesDeploy();
+        virtualTokenPricesDeploy.run();
+
+        SiloVirtualAssetsDeploy siloVirtualAssetsDeploy = new SiloVirtualAssetsDeploy();
+        siloVirtualAssetsDeploy.run();
     }
 }

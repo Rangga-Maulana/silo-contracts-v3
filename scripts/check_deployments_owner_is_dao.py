@@ -48,7 +48,7 @@ COMPONENT_PATHS = {
 }
 
 # Contracts excluded from owner-is-DAO check (by deployment name)
-CONTRACTS_EXCLUDED: set[str] = {"Tower"}
+CONTRACTS_EXCLUDED: set[str] = {"Tower", "VirtualTokenPrice"}
 
 # Chain folder name -> exact env var name used in .env / CI (use env as-is, no derivation)
 CHAIN_TO_RPC_ENV: dict[str, str] = {

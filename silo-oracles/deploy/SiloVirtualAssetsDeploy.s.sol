@@ -15,20 +15,10 @@ import {SiloOraclesContracts} from "./SiloOraclesContracts.sol";
     Resume verification:
     FOUNDRY_PROFILE=oracles \
         forge script silo-oracles/deploy/SiloVirtualAssetsDeploy.s.sol \
-        --ffi --rpc-url $RPC_INK \
+        --ffi --rpc-url $RPC_INJECTIVE \
         --verify \
-        --verifier blockscout \
-        --verifier-url $VERIFIER_URL_INK \
         --private-key $PRIVATE_KEY \
         --resume
-
-    FOUNDRY_PROFILE=oracles forge verify-contract <contract-address> \
-        silo-oracles/contracts/silo-virtual-assets/SiloVirtualAsset8Decimals.sol:SiloVirtualAsset8Decimals \
-        --verifier blockscout \
-        --verifier-url $VERIFIER_URL_INK \
-        --compiler-version 0.8.28 \
-        --num-of-optimizations 200 \
-        --watch
  */
 contract SiloVirtualAssetsDeploy is CommonDeploy {
     function run() public {

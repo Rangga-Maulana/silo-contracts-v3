@@ -17,8 +17,8 @@ Examples (Arbitrum):
 
     # Download Standard JSON from Arbiscan
     python3 scripts/get_standard_json.py \
-        --network arbitrum_one \
-        --address 0x3F6Bf00619eCe8d739e453F5fb43C4cB58E82B24
+        --network avalanche_production \
+        --address 0xc09ad86ce2caf6d6774b3ade845ee267e771105c
 
     # Explorer API URL override (used for ANY chain if set):
     # export VERIFIER_URL_ETHERSCAN_V2=https://api.etherscan.io/v2/api
@@ -48,12 +48,6 @@ EXPLORER_CONFIG = {
         "api_key_envs": ["ETHERSCAN_API_KEY"],
         "chainid": 1,
     },
-    "ethereum_mainnet": {
-        "api_url_default": "https://api.etherscan.io/api",
-        "api_url_env": "VERIFIER_URL_MAINNET",
-        "api_key_envs": ["ETHERSCAN_API_KEY"],
-        "chainid": 1,
-    },
     "arbitrum_one": {
         "api_url_default": "https://api.arbiscan.io/api",
         "api_url_env": "VERIFIER_URL_ARBISCAN",
@@ -63,9 +57,9 @@ EXPLORER_CONFIG = {
     },
     # Kept for backwards-compatibility with older usage.
     "avalanche_production": {
-        "api_url_default": "https://api.snowtrace.io/api",
+        "api_url_default": "https://api.etherscan.io/v2/api?chainid=43114",
         "api_url_env": "VERIFIER_URL_AVALANCHE",
-        "api_key_envs": ["AVASCAN_API_KEY"],
+        "api_key_envs": ["AVASCAN_API_KEY", "ETHERSCAN_API_KEY"],
         "chainid": 43114,
     },
     "linea_production": {

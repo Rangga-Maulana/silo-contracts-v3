@@ -12,6 +12,7 @@ library SiloOraclesContracts {
     string public constant EGGS_TO_SONIC_ADAPTER = "EggsToSonicAdapter.sol";
     string public constant X33_TO_USD_ADAPTER = "X33ToUsdAdapter.sol";
     string public constant WSTETH_TO_STETH_ADAPTER_MAINNET = "WstEthToStEthAdapterMainnet.sol";
+    string public constant VIRTUAL_TOKEN_PRICE = "VirtualTokenPrice.sol";
 }
 
 library SiloOraclesDeployments {

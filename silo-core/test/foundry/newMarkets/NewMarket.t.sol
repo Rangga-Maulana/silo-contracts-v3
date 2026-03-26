@@ -22,6 +22,9 @@ import {IShareToken} from "silo-core/contracts/interfaces/IShareToken.sol";
 import {Utils} from "silo-core/deploy/silo/verifier/Utils.sol";
 import {IWrappedNativeToken} from "silo-core/contracts/interfaces/IWrappedNativeToken.sol";
 
+import {IBankModule} from "../_common/IBankModule.sol";
+import {InjectiveWorkaround} from "../_common/InjectiveWorkaround.sol";
+
 interface OldGauge {
     function killGauge() external;
 }
@@ -30,14 +33,15 @@ interface OldGauge {
     The test is designed to be run right after the silo lending market deployment.
     It is excluded from the general tests CI pipeline and has separate workflow.
 
-    FOUNDRY_PROFILE=core_test CONFIG=0x911DA6516b72cd921A1d422D509a78F66557CF6F \
+    FOUNDRY_INJECTIVE=true \
+    FOUNDRY_PROFILE=core_test CONFIG=0xCd73F3f6dc33b46502cb9c53A67BDdeD0BBaeFc4 \
     EXTERNAL_PRICE_0=4147 \
     EXTERNAL_PRICE_1=1 \
     RPC_URL=$RPC_INJECTIVE \
     forge test --mc "NewMarketTest" --ffi -vvv --mt test_newMarketTest_borrowSilo1
  */
 // solhint-disable var-name-mixedcase
-contract NewMarketTest is Test {
+contract NewMarketTest is InjectiveWorkaround {
     struct BorrowScenario {
         ISilo collateralSilo;
         IERC20Metadata collateralToken;
@@ -64,11 +68,11 @@ contract NewMarketTest is Test {
     uint256 public MAX_LTV1;
 
     modifier logSiloConfigName() {
-        // console2.log(
-        //     "Integration test for SiloConfig",
-        //     string.concat(TOKEN0.symbol(), "/", TOKEN1.symbol()),
-        //     address(SILO_CONFIG)
-        // );
+        console2.log(
+            "Integration test for SiloConfig",
+            string.concat(TOKEN0.symbol(), " / ", TOKEN1.symbol()),
+            address(SILO_CONFIG)
+        );
 
         _;
     }
@@ -81,9 +85,10 @@ contract NewMarketTest is Test {
 
         vm.createSelectFork(_rpc);
 
-
         console2.log("block.timestamp", block.timestamp);
         console2.log("block.number", block.number);
+
+        _customMocksOnInjective();
 
         AddrLib.init();
 
@@ -99,36 +104,16 @@ contract NewMarketTest is Test {
         TOKEN0 = IERC20Metadata(SILO_CONFIG.getConfig(silo0).token);
         TOKEN1 = IERC20Metadata(SILO_CONFIG.getConfig(silo1).token);
 
+        _registerInjectiveMetadataHook(address(TOKEN0));
+        _registerInjectiveMetadataHook(address(TOKEN1));
+
         MAX_LTV0 = SILO_CONFIG.getConfig(silo0).maxLtv;
         MAX_LTV1 = SILO_CONFIG.getConfig(silo1).maxLtv;
 
-        _coverMissingDecimals();
-
-// TOKEN0.symbol();
-        // console2.log(
-        //     "Integration test for SiloConfig",
-        //     string.concat(TOKEN0.symbol(), "/", TOKEN1.symbol()),
-        //     address(SILO_CONFIG)
-        // );
-
-    }
-
-    // in verification script we need decimals, if token does not have this method, we need to hardcode it
-    function _coverMissingDecimals() internal {
-        if (ChainsLib.getChainId() == ChainsLib.INJECTIVE_CHAIN_ID) {
-            // WINJ token on Injective does not have decimals, we need to cover for that
-            address WINJ = AddrLib.getAddress(AddrKey.WINJ);
-
-            if (address(TOKEN0) == WINJ || address(TOKEN1) == WINJ) {
-                vm.mockCall(WINJ, IERC20Metadata.decimals.selector, abi.encode(uint256(18)));
-                vm.mockCall(WINJ, IERC20Metadata.symbol.selector, abi.encode(string("wINJ (mocked)")));
-            }
-        }
+        vm.label(address(this), "Depositor");
     }
 
     function test_newMarketTest_borrowSilo1() public logSiloConfigName {
-        _dealTokens(address(TOKEN0), address(this), 123);
-
         _borrowScenario(
             BorrowScenario({
                 collateralSilo: SILO0,
@@ -191,12 +176,13 @@ contract NewMarketTest is Test {
         console2.log("\t- deposited collateral");
 
         if (_scenario.warpTimeBeforeRepay > 0) {
+            console2.log("\t- warping...");
             vm.warp(block.timestamp + _scenario.warpTimeBeforeRepay);
             console2.log("\twarp ", _scenario.warpTimeBeforeRepay);
         }
 
+        console2.log("\t- check for maxBorrow...");
         uint256 maxBorrow = _scenario.debtSilo.maxBorrow(borrower);
-
         console2.log("\t- check for maxBorrow", maxBorrow);
 
         uint256 colateralMaxLtv = SILO_CONFIG.getConfig(address(_scenario.collateralSilo)).maxLtv;
@@ -286,7 +272,7 @@ contract NewMarketTest is Test {
 
         _dealTokens(address(_debtToken), address(this), maxRepay);
 
-        assertEq(_debtToken.balanceOf(address(this)), maxRepay);
+        assertGe(_debtToken.balanceOf(address(this)), maxRepay, "we need enough tokens for repay");
         _debtSilo.repayShares(sharesToRepay, address(this));
         assertEq((new SiloLens()).getLtv(_debtSilo, address(this)), 0, "Repay is successful, LTV==0");
         console2.log("\t- repaid debt");
@@ -304,22 +290,22 @@ contract NewMarketTest is Test {
     }
 
     function _dealTokens(address _token, address _depositor, uint256 _amount) internal {
+        uint256 balanceBefore = IERC20(_token).balanceOf(_depositor);
+
         if (ChainsLib.getChainId() == ChainsLib.INJECTIVE_CHAIN_ID) {
+            if (balanceBefore != 0) require(IERC20(_token).transfer(makeAddr("out"), balanceBefore));
+
             if (address(_token) == AddrLib.getAddress(AddrKey.WINJ)) {
                 vm.deal(_depositor, _amount);
-                console2.log("tsilo ID", SILO_CONFIG.SILO_ID());
-                console2.log("silo symbol", SILO1.symbol());
-                console2.log("address", address(TOKEN0));
-                // console2.log("total supply 1", IERC20(TOKEN0).totalSupply());
-                // console2.log("total supply", IERC20(_token).totalSupply());
-                console2.log("balance 0xd559eD7B8Eef35708793b7239493f83b9c0e686a", IERC20(_token).balanceOf(0xd559eD7B8Eef35708793b7239493f83b9c0e686a));
                 vm.prank(_depositor);
                 IWrappedNativeToken(payable(_token)).deposit{value: _amount}();
-                return;
+            } else {
+                vm.prank(_token);
+                BANK_MODULE.mint(_depositor, _amount);
             }
+        } else {
+            deal(_token, _depositor, _amount);
         }
-
-        deal(_token, _depositor, _amount);
     }
 
     function _checkGauges(ISiloConfig.ConfigData memory _configData) internal {
@@ -344,7 +330,11 @@ contract NewMarketTest is Test {
 
         vm.prank(hookReceiver.owner());
         hookReceiver.removeGauge(_shareToken);
-        assertEq(address(hookReceiver.configuredGauges(_shareToken)), address(0));
+        assertEq(
+            address(hookReceiver.configuredGauges(_shareToken)),
+            address(0),
+            "gauge mapping should be cleared after removeGauge"
+        );
 
         console2.log(SUCCESS_SYMBOL, shareTokenName, "gauge is removable");
     }

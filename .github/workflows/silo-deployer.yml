@@ -25,11 +25,13 @@ on:
         branches: [ master, develop ]
         paths:
             - 'silo-core/deployments/*/*.json'
+            - 'silo-vaults/deployments/*/*.json'
             - '.github/workflows/silo-deployer.yml'
 
     pull_request:
         paths:
             - 'silo-core/deployments/*/*.json'
+            - 'silo-vaults/deployments/*/*.json'
             - '.github/workflows/silo-deployer.yml'
 
 concurrency:

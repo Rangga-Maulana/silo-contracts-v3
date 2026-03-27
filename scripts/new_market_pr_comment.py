@@ -50,6 +50,20 @@ CHAIN_CONFIG: dict[str, tuple[str, str]] = {
 
 SILO_MARKET_CRAFTER_BASE = "https://silo-finance.github.io/silo-market-crafter/wizard/?step=13&address="
 
+# EVM chain slug -> numeric chain id for Market Crafter deep link
+CHAIN_IDS: dict[str, int] = {
+    "mainnet": 1,
+    "arbitrum_one": 42161,
+    "optimism": 10,
+    "avalanche": 43114,
+    "base": 8453,
+    "bnb": 56,
+    "injective": 1776,
+    "okx": 196,
+    "sonic": 146,
+    "ink": 57073,
+}
+
 SILO_DEPLOYMENTS_JSON = "silo-core/deploy/silo/_siloDeployments.json"
 
 # Prefer verify-silo (Silo verifier CI) comment; fallback to Explorer verification comment
@@ -140,6 +154,10 @@ def build_comment_body(
     addr = normalize_address(address)
     explorer_link = f"{explorer_base}{addr}" if addr else ""
     view_link = f"{SILO_MARKET_CRAFTER_BASE}{addr}" if addr else ""
+    # Optional chain id parameter for Market Crafter "Market config tree" link
+    chain_id = CHAIN_IDS.get(chain)
+    if view_link and chain_id is not None:
+        view_link = f"{view_link}&chain={chain_id}"
 
     lines = [
         f"notify people on slack with this comment when PR will be finalized",

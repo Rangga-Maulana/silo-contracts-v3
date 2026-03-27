@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## Unreleased
 
+## [4.5.4] - 2026-03-27
+### Added
+- silo-market: PT-avUSD-14MAY2026 / USDC on Ethereum Mainnet (#1854)
+- silo-market: PT-avUSD-14MAY2026 / avUSD on Ethereum Mainnet (#1853)
+- Silo_yINJ_WINJ_id_3003 on Injective (#1851)
+
 ## [4.5.3] - 2026-03-25
 ### Added
 - deploy separate virtual tokens for USD, EUR, BTC

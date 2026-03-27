@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## Unreleased
 
+## [4.5.5] - 2026-03-27
+### Updated
+- redeploy SiloVaultsDeployer with new CL factory
+
 ## [4.5.4] - 2026-03-27
 ### Added
 - silo-market: PT-avUSD-14MAY2026 / USDC on Ethereum Mainnet (#1854)

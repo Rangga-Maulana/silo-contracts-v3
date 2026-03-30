@@ -10,7 +10,7 @@ import {ChainlinkV3OracleFactory} from "silo-oracles/contracts/chainlinkV3/Chain
 /*
 FOUNDRY_PROFILE=oracles \
     forge script silo-oracles/deploy/chainlink-v3-oracle/ChainlinkV3OracleFactoryDeploy.s.sol \
-    --ffi --rpc-url $RPC_INJECTIVE --broadcast --slow --verify
+    --ffi --rpc-url $RPC_XDC --broadcast --slow --legacy
 
 Resume verification:
 FOUNDRY_PROFILE=oracles \
@@ -27,6 +27,20 @@ FOUNDRY_PROFILE=oracles forge verify-contract <contract-address> \
     --compiler-version 0.8.28 \
     --rpc-url $RPC_SONIC \
     --watch
+
+    XDC chain deployment:
+
+    FOUNDRY_PROFILE=oracles \
+        forge script silo-oracles/deploy/chainlink-v3-oracle/ChainlinkV3OracleFactoryDeploy.s.sol \
+        --verifier-url $VERIFIER_URL_ETHERSCAN_V2 \
+        --verifier etherscan \
+        --chain 50 \
+        --ffi --rpc-url $RPC_XDC \
+        --etherscan-api-key $ETHERSCAN_API_KEY \
+        --verify \
+        --private-key $PRIVATE_KEY \
+        --legacy \
+        --resume
  */
 contract ChainlinkV3OracleFactoryDeploy is CommonDeploy {
     function run() public returns (ChainlinkV3OracleFactory factory) {

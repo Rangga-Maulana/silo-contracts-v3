@@ -43,6 +43,7 @@ env:
   RPC_BNB: ${{ secrets.RPC_BNB }}
   RPC_OKX: ${{ secrets.RPC_OKX }}
   RPC_INJECTIVE: ${{ secrets.RPC_INJECTIVE }}
+  RPC_XDC: ${{ secrets.RPC_XDC }}
 
 jobs:
   owner-is-dao:
@@ -59,12 +60,13 @@ jobs:
           - mainnet
           - okx
           - optimism
+          - xdc
           # - sonic
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
@@ -85,12 +87,13 @@ jobs:
           - mainnet
           - okx
           - optimism
+          - xdc
           # - sonic
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
@@ -111,12 +114,13 @@ jobs:
           - mainnet
           - okx
           - optimism
+          - xdc
           # - sonic
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 

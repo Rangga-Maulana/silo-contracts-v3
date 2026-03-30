@@ -29,20 +29,28 @@ import {
 /*
     FOUNDRY_PROFILE=core AGGREGATOR=1INCH \
         forge script silo-core/deploy/MainnetDeploy.s.sol \
-        --ffi --rpc-url $RPC_MAINNET --broadcast --verify
-
-    FOUNDRY_PROFILE=core \
-        forge script silo-core/deploy/MainnetDeploy.s.sol \
-        --ffi --rpc-url $RPC_INJECTIVE --broadcast --slow --verify
+        --ffi --rpc-url $RPC_XDC --broadcast --verify --slow --legacy
 
     Resume verification:
     FOUNDRY_PROFILE=core \
         forge script silo-core/deploy/MainnetDeploy.s.sol \
-        --ffi --rpc-url $RPC_INJECTIVE \
+        --ffi --rpc-url $RPC_XDC --chain 50 \
         --verify \
-        --verifier blockscout \
-        --verifier-url $VERIFIER_URL_INJECTIVE \
         --private-key $PRIVATE_KEY \
+        --resume
+
+    XDC chain verification:
+
+    FOUNDRY_PROFILE=core \
+        forge script silo-core/deploy/MainnetDeploy.s.sol \
+        --verifier-url $VERIFIER_URL_XDC \
+        --verifier custom \
+        --chain 50 \
+        --ffi --rpc-url $RPC_XDC \
+        --etherscan-api-key $ETHERSCAN_API_KEY \
+        --verify \
+        --private-key $PRIVATE_KEY \
+        --legacy \
         --resume
  */
 contract MainnetDeploy is CommonDeploy {
@@ -77,7 +85,7 @@ contract MainnetDeploy is CommonDeploy {
         siloHookV1Deploy.run();
         siloHookV2Deploy.run();
         siloHookV3Deploy.run();
-        liquidationHelperDeploy.run(); // TODO once we have exchange on Injective
+        liquidationHelperDeploy.run();
         siloLensDeploy.run();
         siloRouterV2Deploy.run();
         siloIncentivesControllerFactoryDeploy.run();

@@ -15,6 +15,7 @@ env:
     RPC_BNB: ${{ secrets.RPC_BNB }}
     RPC_BASE: ${{ secrets.RPC_BASE }}
     RPC_OKX: ${{ secrets.RPC_OKX }}
+    RPC_XDC: ${{ secrets.RPC_XDC }}
     PRIVATE_KEY: ${{ secrets.ANVIL_PRIVATE_KEY }}
     VERIFIER_URL_SONIC: ${{ secrets.VERIFIER_URL_SONIC }}
     VERIFIER_API_KEY_SONIC: ${{ secrets.VERIFIER_API_KEY_SONIC }}
@@ -51,12 +52,13 @@ jobs:
                     RPC_INJECTIVE,
                     RPC_BNB,
                     RPC_BASE,
-                    RPC_OKX
+                    RPC_OKX,
+                    RPC_XDC
                ]
 
         runs-on: ubuntu-latest
         steps:
-            -   uses: actions/checkout@v3
+            -   uses: actions/checkout@v5
                 
             # Cache all git submodules (large gitmodules/* tree and .git/modules) to speed up CI.
             # Keyed only by .gitmodules so cache can be reused across commits; git will fetch deltas if submodule refs change.

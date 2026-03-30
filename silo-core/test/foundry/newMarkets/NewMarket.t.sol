@@ -74,7 +74,7 @@ contract NewMarketTest is InjectiveWorkaround {
         _;
     }
 
-    function setUp() public {
+    function setUp() public virtual {
         address _siloConfig = vm.envAddress("CONFIG");
         uint256 _externalPrice0 = vm.envUint("EXTERNAL_PRICE_0");
         uint256 _externalPrice1 = vm.envUint("EXTERNAL_PRICE_1");

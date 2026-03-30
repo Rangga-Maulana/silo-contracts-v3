@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## Unreleased
 
+## [4.6.0] - 2026-03-30
+### Added
+- XDC deployment
+- ci: deployment freshness check
+
 ## [4.5.5] - 2026-03-27
 ### Updated
 - redeploy SiloVaultsDeployer with new CL factory

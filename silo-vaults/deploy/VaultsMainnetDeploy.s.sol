@@ -12,20 +12,32 @@ import {SiloVaultsVerifier} from "./SiloVaultsVerifier.s.sol";
 
 /**
     FOUNDRY_PROFILE=vaults \
-        forge script silo-vaults/deploy/MainnetDeploy.s.sol:MainnetDeploy \
-        --ffi --rpc-url $RPC_BNB --broadcast --verify
+        forge script silo-vaults/deploy/VaultsMainnetDeploy.s.sol:VaultsMainnetDeploy \
+        --ffi --rpc-url $RPC_XDC --broadcast --verify --slow --legacy
 
     Resume verification:
     FOUNDRY_PROFILE=vaults \
-        forge script silo-vaults/deploy/MainnetDeploy.s.sol:MainnetDeploy \
+        forge script silo-vaults/deploy/VaultsMainnetDeploy.s.sol:VaultsMainnetDeploy \
         --ffi --rpc-url $RPC_INJECTIVE \
         --verify \
-        --verifier blockscout \
-        --verifier-url $VERIFIER_URL_INJECTIVE \
         --private-key $PRIVATE_KEY \
         --resume
+
+    XDC chain verification:
+
+    FOUNDRY_PROFILE=vaults \
+        forge script silo-vaults/deploy/VaultsMainnetDeploy.s.sol:VaultsMainnetDeploy \
+        --verifier-url $VERIFIER_URL_XDC \
+        --verifier custom \
+        --chain 50 \
+        --ffi --rpc-url $RPC_XDC \
+        --etherscan-api-key $ETHERSCAN_API_KEY \
+        --verify \
+        --private-key $PRIVATE_KEY \
+        --legacy \
+        --resume
  */
-contract MainnetDeploy {
+contract VaultsMainnetDeploy {
     function run() public {
         SiloVaultsFactoryDeploy siloVaultsFactoryDeploy = new SiloVaultsFactoryDeploy();
         PublicAllocatorDeploy publicAllocatorDeploy = new PublicAllocatorDeploy();

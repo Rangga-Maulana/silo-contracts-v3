@@ -18,8 +18,8 @@ FOUNDRY_PROFILE=oracles \
 
     FOUNDRY_PROFILE=oracles \
         forge script silo-oracles/deploy/oracle-scaler/OracleScalerFactoryDeploy.s.sol \
-        --verifier-url $VERIFIER_URL_ETHERSCAN_V2 \
-        --verifier etherscan \
+        --verifier-url $VERIFIER_URL_XDC \
+        --verifier custom \
         --chain 50 \
         --ffi --rpc-url $RPC_XDC \
         --etherscan-api-key $ETHERSCAN_API_KEY \

@@ -2,6 +2,7 @@
 pragma solidity 0.8.28;
 
 import {SafeCast} from "openzeppelin5/utils/math/SafeCast.sol";
+import {Pausable} from "openzeppelin5/utils/Pausable.sol";
 import {ERC4626, Math} from "openzeppelin5/token/ERC20/extensions/ERC4626.sol";
 import {IERC4626, IERC20, IERC20Metadata} from "openzeppelin5/interfaces/IERC4626.sol";
 import {Ownable2Step, Ownable} from "openzeppelin5/access/Ownable2Step.sol";
@@ -18,7 +19,8 @@ import {
     PendingAddress,
     MarketAllocation,
     ISiloVaultBase,
-    ISiloVaultStaticTyping
+    ISiloVaultStaticTyping,
+    IPausable
 } from "./interfaces/ISiloVault.sol";
 
 import {INotificationReceiver} from "./interfaces/INotificationReceiver.sol";
@@ -36,7 +38,7 @@ import {SiloVaultActionsLib} from "./libraries/SiloVaultActionsLib.sol";
 /// @author Silo Labs
 /// @custom:contact security@silo.finance
 /// @notice ERC4626 compliant vault allowing users to deposit assets to any ERC4626 vault.
-contract SiloVault is ERC4626, ERC20Permit, Ownable2Step, Multicall, ISiloVaultStaticTyping {
+contract SiloVault is ERC4626, ERC20Permit, Ownable2Step, Multicall, ISiloVaultStaticTyping, Pausable, IPausable {
     uint256 constant WAD = 1e18;
 
     using Math for uint256;
@@ -69,8 +71,7 @@ contract SiloVault is ERC4626, ERC20Permit, Ownable2Step, Multicall, ISiloVaultS
     /// @inheritdoc ISiloVaultStaticTyping
     mapping(IERC4626 => MarketConfig) public config;
 
-    /// @inheritdoc ISiloVaultBase
-    uint256 public timelock;
+    uint256 internal _timelock;
 
     /// @inheritdoc ISiloVaultStaticTyping
     PendingAddress public pendingGuardian;
@@ -180,7 +181,29 @@ contract SiloVault is ERC4626, ERC20Permit, Ownable2Step, Multicall, ISiloVaultS
         _;
     }
 
+    /**
+     * @dev Modifier to make a function callable only when the contract is not paused.
+     *
+     * Requirements:
+     *
+     * - The contract must not be paused.
+     */
+    modifier whenNotPausedAndNotOwner() {
+        _requireNotPausedIfNotOwner();
+        _;
+    }
+
     /* ONLY OWNER FUNCTIONS */
+
+    /// @inheritdoc IPausable
+    function pause() external virtual onlyOwner {
+        _pause();
+    }
+
+    /// @inheritdoc IPausable
+    function unpause() external virtual onlyOwner {
+        _unpause();
+    }
 
     /// @inheritdoc ISiloVaultBase
     function setCurator(address _newCurator) external virtual onlyOwner {
@@ -198,16 +221,16 @@ contract SiloVault is ERC4626, ERC20Permit, Ownable2Step, Multicall, ISiloVaultS
 
     /// @inheritdoc ISiloVaultBase
     function submitTimelock(uint256 _newTimelock) external virtual onlyOwner {
-        if (_newTimelock == timelock) revert ErrorsLib.AlreadySet();
+        if (_newTimelock == _timelock) revert ErrorsLib.AlreadySet();
         if (pendingTimelock.validAt != 0) revert ErrorsLib.AlreadyPending();
         _checkTimelockBounds(_newTimelock);
 
-        if (_newTimelock > timelock) {
+        if (_newTimelock > _timelock) {
             _setTimelock(_newTimelock);
         } else {
             // Safe "unchecked" cast because newTimelock <= MAX_TIMELOCK.
             // forge-lint: disable-next-line(unsafe-typecast)
-            pendingTimelock.update(uint184(_newTimelock), timelock);
+            pendingTimelock.update(uint184(_newTimelock), _timelock);
 
             emit EventsLib.SubmitTimelock(_newTimelock);
         }
@@ -243,14 +266,17 @@ contract SiloVault is ERC4626, ERC20Permit, Ownable2Step, Multicall, ISiloVaultS
         if (guardian == address(0)) {
             _setGuardian(_newGuardian);
         } else {
-            SiloVaultActionsLib.updatePendingGuardian(pendingGuardian, _newGuardian, timelock);
+            SiloVaultActionsLib.updatePendingGuardian(pendingGuardian, _newGuardian, timelock());
         }
     }
 
     /* ONLY GUARDIAN FUNCTIONS */
 
     /// @inheritdoc ISiloVaultBase
-    function setArbitraryLossThreshold(IERC4626 _market, uint256 _lossThreshold) external virtual onlyGuardianRole {
+    function setArbitraryLossThreshold(
+        IERC4626 _market, 
+        uint256 _lossThreshold
+    ) external virtual onlyGuardianRole whenNotPausedAndNotOwner {
         SiloVaultActionsLib.setArbitraryLossThreshold(_lossThreshold, arbitraryLossThreshold[_market]);
     }
 
@@ -259,34 +285,42 @@ contract SiloVault is ERC4626, ERC20Permit, Ownable2Step, Multicall, ISiloVaultS
         IERC4626 _market,
         uint256 _expectedAssets,
         bool _override
-    ) external virtual onlyGuardianRole {
+    ) external virtual onlyGuardianRole whenNotPausedAndNotOwner {
         SiloVaultActionsLib.syncBalanceTracker(balanceTracker, _market, _expectedAssets, _override);
     }
 
     /* ONLY CURATOR FUNCTIONS */
 
     /// @inheritdoc ISiloVaultBase
-    function submitCap(IERC4626 _market, uint256 _newSupplyCap) external virtual onlyCuratorRole {
+    function submitCap(
+        IERC4626 _market, 
+        uint256 _newSupplyCap
+    ) external virtual onlyCuratorRole whenNotPausedAndNotOwner {
         uint256 supplyCap = SiloVaultActionsLib.submitCapValidate(_market, _newSupplyCap, asset(), config, pendingCap);
 
         if (_newSupplyCap < supplyCap) {
             _setCap(_market, SafeCast.toUint184(_newSupplyCap));
         } else {
-            pendingCap[_market].update(SafeCast.toUint184(_newSupplyCap), timelock);
+            pendingCap[_market].update(SafeCast.toUint184(_newSupplyCap), timelock());
 
             emit EventsLib.SubmitCap(_msgSender(), _market, _newSupplyCap);
         }
     }
 
     /// @inheritdoc ISiloVaultBase
-    function submitMarketRemoval(IERC4626 _market) external virtual onlyCuratorRole {
-        SiloVaultActionsLib.submitMarketRemoval(_market, config, pendingCap, timelock);
+    function submitMarketRemoval(IERC4626 _market) external virtual onlyCuratorRole whenNotPausedAndNotOwner {
+        SiloVaultActionsLib.submitMarketRemoval(_market, config, pendingCap, timelock());
     }
 
     /* ONLY ALLOCATOR FUNCTIONS */
 
     /// @inheritdoc ISiloVaultBase
-    function setSupplyQueue(IERC4626[] calldata _newSupplyQueue) external virtual onlyAllocatorRole {
+    function setSupplyQueue(IERC4626[] calldata _newSupplyQueue) 
+        external 
+        virtual 
+        onlyAllocatorRole 
+        whenNotPausedAndNotOwner 
+    {
         _nonReentrantOn();
 
         SiloVaultActionsLib.validateSupplyQueueEmitEvent(_newSupplyQueue, config);
@@ -297,7 +331,7 @@ contract SiloVault is ERC4626, ERC20Permit, Ownable2Step, Multicall, ISiloVaultS
     }
 
     /// @inheritdoc ISiloVaultBase
-    function updateWithdrawQueue(uint256[] calldata _indexes) external virtual onlyAllocatorRole {
+    function updateWithdrawQueue(uint256[] calldata _indexes) external virtual onlyAllocatorRole whenNotPausedAndNotOwner {
         _nonReentrantOn();
 
         withdrawQueue = SiloVaultActionsLib.updateWithdrawQueue(config, pendingCap, withdrawQueue, _indexes);
@@ -306,7 +340,7 @@ contract SiloVault is ERC4626, ERC20Permit, Ownable2Step, Multicall, ISiloVaultS
     }
 
     /// @inheritdoc ISiloVaultBase
-    function reallocate(MarketAllocation[] calldata _allocations) external virtual onlyAllocatorRole {
+    function reallocate(MarketAllocation[] calldata _allocations) external virtual onlyAllocatorRole whenNotPausedAndNotOwner {
         _nonReentrantOn();
 
         uint256 totalSupplied;
@@ -399,34 +433,38 @@ contract SiloVault is ERC4626, ERC20Permit, Ownable2Step, Multicall, ISiloVaultS
     /* REVOKE FUNCTIONS */
 
     /// @inheritdoc ISiloVaultBase
-    function revokePendingTimelock() external virtual onlyGuardianRole {
+    function revokePendingTimelock() external virtual onlyGuardianRole whenNotPausedAndNotOwner {
         delete pendingTimelock;
 
         emit EventsLib.RevokePendingTimelock(_msgSender());
     }
 
     /// @inheritdoc ISiloVaultBase
-    function revokePendingGuardian() external virtual onlyGuardianRole {
+    function revokePendingGuardian() external virtual onlyGuardianRole whenNotPausedAndNotOwner {
         delete pendingGuardian;
 
         emit EventsLib.RevokePendingGuardian(_msgSender());
     }
 
     /// @inheritdoc ISiloVaultBase
-    function revokePendingCap(IERC4626 _market) external virtual onlyCuratorOrGuardianRole {
+    function revokePendingCap(IERC4626 _market) external virtual onlyCuratorOrGuardianRole whenNotPausedAndNotOwner {
         delete pendingCap[_market];
 
         emit EventsLib.RevokePendingCap(_msgSender(), _market);
     }
 
     /// @inheritdoc ISiloVaultBase
-    function revokePendingMarketRemoval(IERC4626 _market) external virtual onlyCuratorOrGuardianRole {
+    function revokePendingMarketRemoval(IERC4626 _market) external virtual onlyCuratorOrGuardianRole whenNotPausedAndNotOwner {
         delete config[_market].removableAt;
 
         emit EventsLib.RevokePendingMarketRemoval(_msgSender(), _market);
     }
 
     /* EXTERNAL */
+
+    function timelock() public view virtual returns (uint256) {
+        return msg.sender == owner() ? 0 : _timelock;
+    }
 
     /// @inheritdoc ISiloVaultBase
     function supplyQueueLength() external view virtual returns (uint256) {
@@ -439,12 +477,12 @@ contract SiloVault is ERC4626, ERC20Permit, Ownable2Step, Multicall, ISiloVaultS
     }
 
     /// @inheritdoc ISiloVaultBase
-    function acceptTimelock() external virtual afterTimelock(pendingTimelock.validAt) {
+    function acceptTimelock() external virtual afterTimelock(pendingTimelock.validAt) whenNotPausedAndNotOwner {
         _setTimelock(pendingTimelock.value);
     }
 
     /// @inheritdoc ISiloVaultBase
-    function acceptGuardian() external virtual afterTimelock(pendingGuardian.validAt) {
+    function acceptGuardian() external virtual afterTimelock(pendingGuardian.validAt) whenNotPausedAndNotOwner {
         _setGuardian(pendingGuardian.value);
     }
 
@@ -453,6 +491,7 @@ contract SiloVault is ERC4626, ERC20Permit, Ownable2Step, Multicall, ISiloVaultS
         external
         virtual
         afterTimelock(pendingCap[_market].validAt)
+        whenNotPausedAndNotOwner
     {
         _nonReentrantOn();
 
@@ -463,7 +502,7 @@ contract SiloVault is ERC4626, ERC20Permit, Ownable2Step, Multicall, ISiloVaultS
     }
 
     /// @inheritdoc ISiloVaultBase
-    function claimRewards() public virtual {
+    function claimRewards() public virtual whenNotPausedAndNotOwner {
         _nonReentrantOn();
 
         _updateLastTotalAssets(_accrueFee());
@@ -535,7 +574,13 @@ contract SiloVault is ERC4626, ERC20Permit, Ownable2Step, Multicall, ISiloVaultS
     }
 
     /// @inheritdoc IERC20
-    function transfer(address _to, uint256 _value) public virtual override(ERC20, IERC20) returns (bool success) {
+    function transfer(address _to, uint256 _value) 
+        public 
+        virtual 
+        override(ERC20, IERC20) 
+        whenNotPausedAndNotOwner 
+        returns (bool success) 
+    {
         _nonReentrantOn();
 
         _updateLastTotalAssets(_accrueFee());
@@ -550,6 +595,7 @@ contract SiloVault is ERC4626, ERC20Permit, Ownable2Step, Multicall, ISiloVaultS
         public
         virtual
         override(ERC20, IERC20)
+        whenNotPausedAndNotOwner
         returns (bool success)
     {
         _nonReentrantOn();
@@ -562,7 +608,13 @@ contract SiloVault is ERC4626, ERC20Permit, Ownable2Step, Multicall, ISiloVaultS
     }
 
     /// @inheritdoc IERC4626
-    function deposit(uint256 _assets, address _receiver) public virtual override returns (uint256 shares) {
+    function deposit(uint256 _assets, address _receiver) 
+        public 
+        virtual 
+        override 
+        whenNotPausedAndNotOwner 
+        returns (uint256 shares) 
+    {
         _nonReentrantOn();
 
         uint256 newTotalAssets = _accrueFee();
@@ -579,7 +631,13 @@ contract SiloVault is ERC4626, ERC20Permit, Ownable2Step, Multicall, ISiloVaultS
     }
 
     /// @inheritdoc IERC4626
-    function mint(uint256 _shares, address _receiver) public virtual override returns (uint256 assets) {
+    function mint(uint256 _shares, address _receiver) 
+        public 
+        virtual 
+        override 
+        whenNotPausedAndNotOwner 
+        returns (uint256 assets) 
+    {
         _nonReentrantOn();
 
         uint256 newTotalAssets = _accrueFee();
@@ -600,6 +658,7 @@ contract SiloVault is ERC4626, ERC20Permit, Ownable2Step, Multicall, ISiloVaultS
         public
         virtual
         override
+        whenNotPausedAndNotOwner
         returns (uint256 shares)
     {
         _nonReentrantOn();
@@ -623,7 +682,7 @@ contract SiloVault is ERC4626, ERC20Permit, Ownable2Step, Multicall, ISiloVaultS
         uint256 _shares,
         address _receiver,
         address _owner
-    ) public virtual override returns (uint256 assets) {
+    ) public virtual override whenNotPausedAndNotOwner returns (uint256 assets) {
         _nonReentrantOn();
 
         uint256 newTotalAssets = _accrueFee();
@@ -797,9 +856,9 @@ contract SiloVault is ERC4626, ERC20Permit, Ownable2Step, Multicall, ISiloVaultS
         if (_newTimelock < ConstantsLib.MIN_TIMELOCK) revert ErrorsLib.BelowMinTimelock();
     }
 
-    /// @dev Sets `timelock` to `newTimelock`.
+    /// @dev Sets `_timelock` to `newTimelock`.
     function _setTimelock(uint256 _newTimelock) internal virtual {
-        timelock = _newTimelock;
+        _timelock = _newTimelock;
 
         emit EventsLib.SetTimelock(_msgSender(), _newTimelock);
 
@@ -1064,5 +1123,9 @@ contract SiloVault is ERC4626, ERC20Permit, Ownable2Step, Multicall, ISiloVaultS
         uint256 balanceAfter = SiloVaultActionsLib.ERC20BalanceOf(_asset, address(this));
 
         if (_balanceBefore + _withdrawnAssets != balanceAfter) revert ErrorsLib.FailedToWithdraw();
+    }
+
+    function _requireNotPausedIfNotOwner() private view {
+        if (msg.sender != owner()) _requireNotPaused();
     }
 }

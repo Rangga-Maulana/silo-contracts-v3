@@ -209,12 +209,32 @@ interface ISiloVaultStaticTyping is ISiloVaultBase {
     function pendingTimelock() external view returns (uint192 value, uint64 validAt);
 }
 
+interface IPausable {
+     /**
+     * @dev Triggers stopped state.
+     *
+     * Requirements:
+     *
+     * - The contract must not be paused.
+     */
+    function pause() external;
+
+    /**
+     * @dev Returns to normal state.
+     *
+     * Requirements:
+     *
+     * - The contract must be paused.
+     */
+    function unpause() external;
+}
+
 /// @title IMetaMorpho
 /// @dev Forked with gratitude from Morpho Labs.
 /// @author Silo Labs
 /// @custom:contact security@silo.finance
 /// @dev Use this interface for SiloVault to have access to all the functions with the appropriate function signatures.
-interface ISiloVault is ISiloVaultBase, IERC4626, IERC20Permit, IOwnable, IMulticall {
+interface ISiloVault is ISiloVaultBase, IERC4626, IERC20Permit, IOwnable, IMulticall, IPausable {
     /// @notice Returns the current configuration of each market.
     function config(IERC4626) external view returns (MarketConfig memory);
 

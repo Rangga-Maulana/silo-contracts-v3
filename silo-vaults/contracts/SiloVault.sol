@@ -138,35 +138,25 @@ contract SiloVault is ERC4626, ERC20Permit, Ownable2Step, Multicall, ISiloVaultS
 
     /// @dev Reverts if the caller doesn't have the curator role.
     modifier onlyCuratorRole() {
-        address sender = _msgSender();
-        if (sender != curator && sender != owner()) revert ErrorsLib.NotCuratorRole();
-
+        _onlyCuratorRole();
         _;
     }
 
     /// @dev Reverts if the caller doesn't have the allocator role.
     modifier onlyAllocatorRole() {
-        address sender = _msgSender();
-        if (!isAllocator[sender] && sender != curator && sender != owner()) {
-            revert ErrorsLib.NotAllocatorRole();
-        }
-
+        _onlyAllocatorRole();
         _;
     }
 
     /// @dev Reverts if the caller doesn't have the guardian role.
     modifier onlyGuardianRole() {
-        if (_msgSender() != owner() && _msgSender() != guardian) revert ErrorsLib.NotGuardianRole();
-
+        _onlyGuardianRole();
         _;
     }
 
     /// @dev Reverts if the caller doesn't have the curator nor the guardian role.
     modifier onlyCuratorOrGuardianRole() {
-        if (_msgSender() != guardian && _msgSender() != curator && _msgSender() != owner()) {
-            revert ErrorsLib.NotCuratorNorGuardianRole();
-        }
-
+        _onlyCuratorOrGuardianRole();
         _;
     }
 
@@ -175,9 +165,7 @@ contract SiloVault is ERC4626, ERC20Permit, Ownable2Step, Multicall, ISiloVaultS
     /// - there's no pending value;
     /// - the timelock has not elapsed since the pending value has been submitted.
     modifier afterTimelock(uint256 _validAt) {
-        if (_validAt == 0) revert ErrorsLib.NoPendingValue();
-        if (block.timestamp < _validAt) revert ErrorsLib.TimelockNotElapsed();
-
+        _afterTimelock(_validAt);
         _;
     }
 
@@ -1123,6 +1111,33 @@ contract SiloVault is ERC4626, ERC20Permit, Ownable2Step, Multicall, ISiloVaultS
         uint256 balanceAfter = SiloVaultActionsLib.ERC20BalanceOf(_asset, address(this));
 
         if (_balanceBefore + _withdrawnAssets != balanceAfter) revert ErrorsLib.FailedToWithdraw();
+    }
+
+    function _onlyCuratorRole() internal view virtual {
+        address sender = _msgSender();
+        if (sender != curator && sender != owner()) revert ErrorsLib.NotCuratorRole();
+    }
+
+    function _onlyAllocatorRole() internal view virtual {
+        address sender = _msgSender();
+        if (!isAllocator[sender] && sender != curator && sender != owner()) {
+            revert ErrorsLib.NotAllocatorRole();
+        }
+    }
+
+    function _onlyGuardianRole() internal view virtual{
+        if (_msgSender() != owner() && _msgSender() != guardian) revert ErrorsLib.NotGuardianRole();
+    }
+
+    function _onlyCuratorOrGuardianRole() internal view virtual {
+        if (_msgSender() != guardian && _msgSender() != curator && _msgSender() != owner()) {
+            revert ErrorsLib.NotCuratorNorGuardianRole();
+        }
+    }
+
+    function _afterTimelock(uint256 _validAt) internal view virtual {
+        if (_validAt == 0) revert ErrorsLib.NoPendingValue();
+        if (block.timestamp < _validAt) revert ErrorsLib.TimelockNotElapsed();
     }
 
     function _requireNotPausedIfNotOwner() private view {

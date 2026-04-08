@@ -39,5 +39,10 @@ contract SiloDeployWithHookReceiverOwner is SiloDeploy {
         string memory hookReceiverOwnerKey = vm.envString("HOOK_RECEIVER_OWNER");
         owner = AddrLib.getAddress(hookReceiverOwnerKey);
     }
+
+    function _getClonableHookReceiverOwner() internal view virtual override returns (address owner) {
+        uint256 deployerPrivateKey = uint256(vm.envBytes32("HOOK_RECEIVER_OWNER"));
+        owner = vm.addr(deployerPrivateKey);
+    }
 }
 

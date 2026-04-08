@@ -17,14 +17,25 @@ import {IIncentivesClaimingLogicFactory} from "silo-vaults/contracts/interfaces/
 import {SiloVaultsContracts, SiloVaultsDeployments} from "silo-vaults/common/SiloVaultsContracts.sol";
 
 import {CommonDeploy} from "./common/CommonDeploy.sol";
+
 /*
 FOUNDRY_PROFILE=vaults forge script silo-vaults/deploy/DeployTestVault.s.sol:DeployTestVault \
     --ffi --rpc-url $RPC_ARBITRUM --broadcast --verify
 
 ============== DEPLOYED =================================
+1 day timelock:
         vault 0x159CD30288c687353a672dBB1e482fc4c18f3e66
         incentivesController 0x52064E5165b227847bfdDC84d36A22683EB122c2
         idleVault 0x08Df2F141B12556F7c05A35F89a0FBf2b92dF89c
+
+============== DEPLOYED =================================
+1 minute vault:
+  SiloVaultDeployer 0xD186343c00057488a18825f1513860Ff56e6561b
+  SiloIncentivesControllerCLFactory 0x38C5CC1498Ec96E7FFC5AFd67527c91844f2269D
+
+        vault 0x8934145E24686679d47eE5e24ebC9D5c8aDA2E7a
+        incentivesController 0xB88a3e3E6169B36a50292AAf45df98Ee832a0dbA
+        idleVault 0xcCE3815a22bcBa28a764DD8863658E31727430E9
 ========================================================
 */
 contract DeployTestVault is CommonDeploy {
@@ -35,9 +46,11 @@ contract DeployTestVault is CommonDeploy {
 
         string memory network = ChainsLib.chainAlias();
 
-        ISiloVaultDeployer deployer = ISiloVaultDeployer(
-            SiloVaultsDeployments.get(SiloVaultsContracts.SILO_VAULT_DEPLOYER, network)
-        );
+        ISiloVaultDeployer deployer =
+            ISiloVaultDeployer(SiloVaultsDeployments.get(SiloVaultsContracts.SILO_VAULT_DEPLOYER, network));
+
+        // 0xD186343c00057488a18825f1513860Ff56e6561b - no timelock deployer
+        deployer = ISiloVaultDeployer(0xD186343c00057488a18825f1513860Ff56e6561b);
 
         IIncentivesClaimingLogicFactory[] memory trustedFactories = new IIncentivesClaimingLogicFactory[](1);
         trustedFactories[0] = IIncentivesClaimingLogicFactory(
@@ -58,7 +71,7 @@ contract DeployTestVault is CommonDeploy {
         (ISiloVault vault, ISiloIncentivesController incentivesController, IERC4626 idleVault) = deployer.createSiloVault(
             ISiloVaultDeployer.CreateSiloVaultParams({
                 initialOwner: initialOwner,
-                initialTimelock: 1 days,
+                initialTimelock: 1 minutes,
                 asset: asset,
                 incentivesControllerOwner: initialOwner,
                 name: "Test for TEST_TOKEN_18",

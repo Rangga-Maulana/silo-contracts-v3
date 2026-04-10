@@ -56,6 +56,7 @@ jobs:
           - avalanche
           - base
           - bnb
+          - injective
           - ink
           - mainnet
           - okx
@@ -83,6 +84,7 @@ jobs:
           - avalanche
           - base
           - bnb
+          - injective
           - ink
           - mainnet
           - okx
@@ -110,6 +112,7 @@ jobs:
           - avalanche
           - base
           - bnb
+          - injective
           # - ink
           - mainnet
           - okx

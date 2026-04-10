@@ -43,6 +43,7 @@ jobs:
           - avalanche
           - base
           - bnb
+          - injective
           - mainnet
           - okx
           - optimism

@@ -6,6 +6,14 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## Unreleased
 
+## [4.8.0] - 2026-04-10
+### Added
+- liquidation helper for Li.Fi on XDC (#1869)
+
+### Markets
+- silo-market: msY / USDC on Ethereum Mainnet (#1866)
+- silo-market: WXDC / USDC on XDC Network (#1863)
+
 ## [4.7.1] - 2026-03-31
 ### Updated
 - add Injective to CI

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity 0.8.28;
 
+import {console2} from "forge-std/console2.sol";
+
 import {AddrLib} from "silo-foundry-utils/lib/AddrLib.sol";
 import {ChainsLib} from "silo-foundry-utils/lib/ChainsLib.sol";
 
@@ -11,16 +13,18 @@ import {GlobalPause} from "silo-core/contracts/utils/GlobalPause.sol";
 import {IGlobalPause} from "common/utils/interfaces/IGlobalPause.sol";
 
 /*
+    
+    FOUNDRY_INJECTIVE=true \
     FOUNDRY_PROFILE=core \
         forge script silo-core/deploy/GlobalPauseDeploy.s.sol \
-        --ffi --rpc-url $RPC_INK --broadcast --verify
+        --ffi --rpc-url $RPC_INJECTIVE --broadcast --verify
 
     Resume verification:
     FOUNDRY_PROFILE=core \
         forge script silo-core/deploy/GlobalPauseDeploy.s.sol \
-        --ffi --rpc-url $RPC_INK \
+        --ffi --rpc-url $RPC_XDC \
         --verify \
-        --verifier blockscout --verifier-url $VERIFIER_URL_INK \
+        --verifier blockscout --verifier-url $VERIFIER_URL_XDC \
         --private-key $PRIVATE_KEY \
         --resume
 */
@@ -29,6 +33,8 @@ contract GlobalPauseDeploy is CommonDeploy {
         uint256 deployerPrivateKey = uint256(vm.envBytes32("PRIVATE_KEY"));
 
         address dao = AddrLib.getAddressSafe(ChainsLib.chainAlias(), AddrKey.DAO);
+
+        console2.log("dao", dao);
 
         vm.startBroadcast(deployerPrivateKey);
 

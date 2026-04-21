@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## Unreleased
 
+## [4.9.1] - 2026-04-21
+### Updated
+- add GlobalPause artefacts
+
 ## [4.9.0] - 2026-04-21
 ### Added
 - GlobalPause deployment

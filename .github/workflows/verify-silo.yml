@@ -19,6 +19,11 @@ env:
 
 on:
   pull_request:
+    # Skip release merges into master/main; verify only on regular feature PRs
+    # (e.g. PRs targeting develop). New silos must have been verified there already.
+    branches-ignore:
+      - master
+      - main
     # Trigger only when the deployments file is changed
     paths:
       - 'silo-core/deploy/silo/_siloDeployments.json'

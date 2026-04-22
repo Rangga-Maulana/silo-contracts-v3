@@ -17,8 +17,8 @@ Examples (Arbitrum):
 
     # Download Standard JSON from Arbiscan
     python3 scripts/get_standard_json.py \
-        --network avalanche_production \
-        --address 0xc09ad86ce2caf6d6774b3ade845ee267e771105c
+        --network arbitrum_one \
+        --address 0xD5e41d7FA4BD66bD580AD4f68dA36353BA5D3B27
 
     # Explorer API URL override (used for ANY chain if set):
     # export VERIFIER_URL_ETHERSCAN_V2=https://api.etherscan.io/v2/api

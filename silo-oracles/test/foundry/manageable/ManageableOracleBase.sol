@@ -3,6 +3,8 @@ pragma solidity 0.8.28;
 
 import {Test} from "forge-std/Test.sol";
 
+import {RevertingOracle} from "silo-oracles/contracts/reverting/RevertingOracle.sol";
+
 import {IERC20Metadata} from "silo-oracles/test/foundry/interfaces/IERC20Metadata.sol";
 import {ManageableOracleFactory} from "silo-oracles/contracts/manageable/ManageableOracleFactory.sol";
 import {IManageableOracleFactory} from "silo-oracles/contracts/interfaces/IManageableOracleFactory.sol";
@@ -125,12 +127,15 @@ abstract contract ManageableOracleBase is Test {
             abi.encodeWithSelector(ISiloOracle.quoteToken.selector),
             abi.encode(oracleMock.quoteToken())
         );
+        
         vm.mockCall(
             revertingOracle, abi.encodeWithSelector(IManageableOracle.baseToken.selector), abi.encode(baseToken)
         );
+        
         vm.mockCallRevert(
             revertingOracle, abi.encodeWithSelector(ISiloOracle.quote.selector, 10 ** 18, baseToken), ""
         );
+
         vm.expectRevert(IManageableOracle.OracleQuoteFailed.selector);
         oracle.oracleVerification(ISiloOracle(revertingOracle));
     }
@@ -395,6 +400,43 @@ abstract contract ManageableOracleBase is Test {
         assertEq(pendingOracleValue, address(0), "pendingOracle not cleared after accept");
         assertEq(pendingOracleValidAt, 0, "pendingOracle validAt not cleared after accept");
         assertEq(address(oracle.oracle()), address(otherOracleMock), "oracle not updated after accept");
+    }
+    
+    /*
+        FOUNDRY_PROFILE=oracles forge test --mt test_proposeOracle_ThisOracleAlwaysReverts
+    */
+    function test_proposeOracle_ThisOracleAlwaysReverts() public {
+        RevertingOracle oracleReverts = new RevertingOracle();
+
+        vm.expectRevert(RevertingOracle.ThisOracleAlwaysReverts.selector);
+        oracleReverts.quote(1e6, baseToken); // It does revert if ask direcly
+
+        vm.prank(owner);
+        oracle.proposeOracle(oracleReverts);
+
+        vm.startPrank(address(oracle));
+        assertEq(
+            oracleReverts.quote(1e6, baseToken), 
+            1, 
+            "It does not revert if it is not active yet and call is from managable oracle"
+        );
+        vm.stopPrank();
+
+        vm.expectRevert(RevertingOracle.ThisOracleAlwaysReverts.selector);
+        ISiloOracle(address(oracleReverts)).quote(1e6, baseToken);
+
+        vm.warp(block.timestamp + TIMELOCK);
+        vm.prank(owner);
+        oracle.acceptOracle();
+
+        vm.expectRevert(RevertingOracle.ThisOracleAlwaysReverts.selector);
+        ISiloOracle(address(oracle)).quote(1e6, baseToken);
+
+        vm.expectRevert(RevertingOracle.ThisOracleAlwaysReverts.selector);
+        ISiloOracle(address(oracle)).beforeQuote(baseToken);
+
+        vm.expectRevert(RevertingOracle.ThisOracleAlwaysReverts.selector);
+        oracleReverts.quote(1e6, baseToken); // It does revert if ask direcly
     }
 
     /*

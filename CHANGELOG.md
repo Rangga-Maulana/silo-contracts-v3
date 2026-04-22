@@ -6,6 +6,16 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## Unreleased
 
+## [4.10.0] - 2026-04-22
+### Added
+- reverting oracle deployment (#1877)
+- RevertingOracle (#1868)
+- ci: support case when change is just a comma at the end of line (#1876)
+- add fixed-2 and fixed-3 IRM configs (#1873)
+
+### Markets
+- silo-market: scrvUSD / USDC on XDC Network (#1876)
+
 ## [4.9.1] - 2026-04-21
 ### Updated
 - add GlobalPause artefacts

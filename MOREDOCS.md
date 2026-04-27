@@ -58,6 +58,7 @@ this will make forge visible for imports eg: `import "forge-std/Test.sol"`.
 ### Build Silo Foundry Utils
 ```bash
 cd gitmodules/silo-foundry-utils
+git checkout main
 git pull
 cargo build --release
 cp target/release/silo-foundry-utils ../../silo-foundry-utils

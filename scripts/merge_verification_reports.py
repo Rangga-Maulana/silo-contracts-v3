@@ -43,6 +43,8 @@ SECTION_ORDER = [
     "sonic",
     "xdc",
     "mantle",
+    "megaeth etherscan",
+    "megaeth blockscout",
 ]
 
 # Block explorer address URL (append address). summary_key -> base URL.
@@ -60,6 +62,8 @@ EXPLORER_ADDRESS_URL: dict[str, str] = {
     "sonic": "https://sonicscan.org/address/",
     "xdc": "https://xdcscan.com/address/",
     "mantle": "https://mantlescan.xyz/address/",
+    "megaeth etherscan": "https://mega.etherscan.io/address/",
+    "megaeth blockscout": "https://megaeth.blockscout.com/address/",
 }
 
 # Backward-compat mapping for sections parsed from existing PR comments.
@@ -79,6 +83,8 @@ DISPLAY_LABEL_TO_SUMMARY_KEY: dict[str, str] = {
     "Sonic": "sonic",
     "XDC": "xdc",
     "Mantle": "mantle",
+    "MegaETH (etherscan)": "megaeth etherscan",
+    "MegaETH (blockscout)": "megaeth blockscout",
 }
 
 

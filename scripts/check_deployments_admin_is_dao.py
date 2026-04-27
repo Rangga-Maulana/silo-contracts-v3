@@ -51,6 +51,7 @@ CHAIN_TO_RPC_ENV: dict[str, str] = {
     "ink": "RPC_INK",
     "mainnet": "RPC_MAINNET",
     "mantle": "RPC_MANTLE",
+    "megaeth": "RPC_MEGAETH",
     "okx": "RPC_OKX",
     "optimism": "RPC_OPTIMISM",
     "sonic": "RPC_SONIC",

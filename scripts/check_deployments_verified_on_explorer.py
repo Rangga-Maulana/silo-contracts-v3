@@ -41,6 +41,9 @@ XDC (https://xdcscan.com/) uses the Etherscan API V2 stack (see https://docs.xdc
 getsourcecode flow via api.etherscan.io/v2 with chainid=50 and the default ETHERSCAN_API_KEY.
 
 Mantle uses Mantlescan API URL from VERIFIER_URL_MANTLE.
+MegaETH checks both supported explorers:
+  - Etherscan API URL from VERIFIER_URL_MEGAETH
+  - Blockscout API URL from VERIFIER_URL_MEGAETH_SCOUT
 """
 
 from __future__ import annotations
@@ -76,6 +79,7 @@ CHAIN_TO_CHAIN_ID: dict[str, str] = {
     "injective": "1776",
     "xdc": "50",
     "mantle": "5000",
+    "megaeth": "4326",
 }
 
 # Defaults for etherscan-compatible endpoints.
@@ -103,6 +107,10 @@ CHAIN_EXPLORERS: dict[str, list[tuple[str, str]]] = {
     "sonic": [("default", "https://api.etherscan.io/v2/api?chainid=146")],
     "xdc": [("default", "https://api.etherscan.io/v2/api?chainid=50")],
     "mantle": [("default", "https://api.etherscan.io/v2/api?chainid=5000")],
+    "megaeth": [
+        ("etherscan", "https://api.etherscan.io/v2/api?chainid=4326"),
+        ("blockscout", "https://megaeth.blockscout.com/api"),
+    ],
 }
 
 # Chains that have explorer config (for --chain all; excludes e.g. ink)
@@ -124,6 +132,8 @@ EXPLORER_ADDRESS_URL: dict[str, str] = {
     "sonic": "https://sonicscan.org/address/",
     "xdc": "https://xdcscan.com/address/",
     "mantle": "https://mantlescan.xyz/address/",
+    "megaeth etherscan": "https://mega.etherscan.io/address/",
+    "megaeth blockscout": "https://megaeth.blockscout.com/address/",
 }
 
 # Display names for PR comment output
@@ -139,6 +149,7 @@ CHAIN_DISPLAY_NAMES: dict[str, str] = {
     "sonic": "Sonic",
     "xdc": "XDC",
     "mantle": "Mantle",
+    "megaeth": "MegaETH",
 }
 
 USER_AGENT = "Mozilla/5.0 (compatible; explorer-api-verify-checker/1.0)"
@@ -247,6 +258,12 @@ def resolve_api_config(chain: str) -> tuple[list[tuple[str, str]], str]:
     if chain == "mantle":
         return [
             ("default", os.environ.get("VERIFIER_URL_MANTLE") or "https://api.etherscan.io/v2/api?chainid=5000"),
+        ], api_key
+
+    if chain == "megaeth":
+        return [
+            ("etherscan", os.environ.get("VERIFIER_URL_MEGAETH") or "https://api.etherscan.io/v2/api?chainid=4326"),
+            ("blockscout", os.environ.get("VERIFIER_URL_MEGAETH_SCOUT") or "https://megaeth.blockscout.com/api"),
         ], api_key
 
     explorers = CHAIN_EXPLORERS.get(chain)

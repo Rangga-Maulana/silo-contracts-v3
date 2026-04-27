@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ### Added
 - Mentle deployment
 
+## [4.11.0] - 2026-04-27
+### Added
+- MegaETH deployment
+
 ## [4.10.0] - 2026-04-22
 ### Added
 - reverting oracle deployment (#1877)

@@ -132,6 +132,7 @@ contract LiquidationHelperDeploy is CommonDeploy {
         if (chainId == ChainsLib.XDC_CHAIN_ID) return payable(AddrLib.getAddress(AddrKey.DAO));
         if (chainId == ChainsLib.XDC_APOTHEM_CHAIN_ID) return payable(AddrLib.getAddress(AddrKey.DAO));
         if (chainId == ChainsLib.MANTLE_CHAIN_ID) return payable(AddrLib.getAddress(AddrKey.DAO));
+        if (chainId == ChainsLib.MEGAETH_CHAIN_ID) return payable(AddrLib.getAddress(AddrKey.DAO));
 
         revert(string.concat("[LiquidationHelperDeploy] tokenReceiver not set for ", ChainsLib.chainAlias()));
     }

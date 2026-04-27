@@ -29,7 +29,7 @@ import {
 /*
     FOUNDRY_PROFILE=core AGGREGATOR=1INCH \
         forge script silo-core/deploy/MainnetDeploy.s.sol \
-        --ffi --rpc-url $RPC_XDC --broadcast --verify --slow --legacy
+        --ffi --rpc-url $RPC_MEGAETH --broadcast --slow --gas-estimate-multiplier 5000
 
     Resume verification:
     FOUNDRY_PROFILE=core \
@@ -96,6 +96,5 @@ contract MainnetDeploy is CommonDeploy {
 
         // execute deployer at the end, to make sure we est factories
         siloDeployerDeploy.run();
-
     }
 }

@@ -130,5 +130,11 @@
             "implementation": "0xf0c5EA70A0f3B0f6238139043979F98D83CFa0D3",
             "description": "silo v3 implementation"
         }
+    ],
+    "megaeth": [
+        {
+            "implementation": "0x03e03B56BD24E0B3B206403596A40cF48fb54279",
+            "description": "silo v3 implementation"
+        }
     ]
 }

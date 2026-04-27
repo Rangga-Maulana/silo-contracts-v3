@@ -74,7 +74,6 @@ DISPLAY_LABEL_TO_SUMMARY_KEY: dict[str, str] = {
     "Avalanche (etherscan)": "avalanche etherscan",
     "Base": "base",
     "BNB": "bnb",
-    "Injective": "injective blockscout",
     "Injective (blockscout)": "injective blockscout",
     "Injective (cloud)": "injective cloud",
     "Mainnet": "mainnet",
@@ -112,6 +111,11 @@ def normalize_section_key(section_key_or_label: str) -> str:
             return "avalanche routescan"
         if "ether" in lower or "snowtrace" in lower:
             return "avalanche etherscan"
+    if lower.startswith("megaeth"):
+        if "blockscout" in lower:
+            return "megaeth blockscout"
+        if "etherscan" in lower:
+            return "megaeth etherscan"
 
     return raw
 

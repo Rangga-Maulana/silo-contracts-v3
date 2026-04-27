@@ -42,6 +42,9 @@ SECTION_ORDER = [
     "okx",
     "sonic",
     "xdc",
+    "mantle",
+    "megaeth etherscan",
+    "megaeth blockscout",
 ]
 
 # Block explorer address URL (append address). summary_key -> base URL.
@@ -58,6 +61,9 @@ EXPLORER_ADDRESS_URL: dict[str, str] = {
     "okx": "https://www.oklink.com/x-layer/address/",
     "sonic": "https://sonicscan.org/address/",
     "xdc": "https://xdcscan.com/address/",
+    "mantle": "https://mantlescan.xyz/address/",
+    "megaeth etherscan": "https://mega.etherscan.io/address/",
+    "megaeth blockscout": "https://megaeth.blockscout.com/address/",
 }
 
 # Backward-compat mapping for sections parsed from existing PR comments.
@@ -68,7 +74,6 @@ DISPLAY_LABEL_TO_SUMMARY_KEY: dict[str, str] = {
     "Avalanche (etherscan)": "avalanche etherscan",
     "Base": "base",
     "BNB": "bnb",
-    "Injective": "injective blockscout",
     "Injective (blockscout)": "injective blockscout",
     "Injective (cloud)": "injective cloud",
     "Mainnet": "mainnet",
@@ -76,6 +81,9 @@ DISPLAY_LABEL_TO_SUMMARY_KEY: dict[str, str] = {
     "OKX": "okx",
     "Sonic": "sonic",
     "XDC": "xdc",
+    "Mantle": "mantle",
+    "MegaETH (etherscan)": "megaeth etherscan",
+    "MegaETH (blockscout)": "megaeth blockscout",
 }
 
 
@@ -103,6 +111,11 @@ def normalize_section_key(section_key_or_label: str) -> str:
             return "avalanche routescan"
         if "ether" in lower or "snowtrace" in lower:
             return "avalanche etherscan"
+    if lower.startswith("megaeth"):
+        if "blockscout" in lower:
+            return "megaeth blockscout"
+        if "etherscan" in lower:
+            return "megaeth etherscan"
 
     return raw
 

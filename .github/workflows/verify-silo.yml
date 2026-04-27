@@ -12,6 +12,8 @@ env:
     RPC_BASE: ${{ secrets.RPC_BASE }}
     RPC_OKX: ${{ secrets.RPC_OKX }}
     RPC_XDC: ${{ secrets.RPC_XDC }}
+    RPC_MANTLE: ${{ secrets.RPC_MANTLE }}
+    RPC_MEGAETH: ${{ secrets.RPC_MEGAETH }}
     PRIVATE_KEY: ${{ secrets.ANVIL_PRIVATE_KEY }}
     VERIFIER_URL_SONIC: ${{ secrets.VERIFIER_URL_SONIC }}
     VERIFIER_API_KEY_SONIC: ${{ secrets.VERIFIER_API_KEY_SONIC }}
@@ -19,6 +21,11 @@ env:
 
 on:
   pull_request:
+    # Skip release merges into master/main; verify only on regular feature PRs
+    # (e.g. PRs targeting develop). New silos must have been verified there already.
+    branches-ignore:
+      - master
+      - main
     # Trigger only when the deployments file is changed
     paths:
       - 'silo-core/deploy/silo/_siloDeployments.json'

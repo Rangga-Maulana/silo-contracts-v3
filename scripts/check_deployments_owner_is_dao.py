@@ -311,7 +311,7 @@ def main() -> int:
     skip_count = 0
     ok_count = 0
     fail_count = 0
-    failed_contracts: list[tuple[str, str]] = []
+    failed_contracts: list[tuple[str, str, str]] = []
     pending_owner_contracts: list[tuple[str, str, str, str]] = []  # (component, contract_name, address, pending_owner)
 
     for component, contract_name, address, abi in deployments:
@@ -358,7 +358,7 @@ def main() -> int:
             pending_owner_contracts.append((component, contract_name, address, pending))
         has_failure = True
         fail_count += 1
-        failed_contracts.append((component, contract_name))
+        failed_contracts.append((component, contract_name, address))
 
     if args.dry_run:
         print(f"Dry-run: would check {len(deployments)} deployments for chain={chain}.")
@@ -373,8 +373,8 @@ def main() -> int:
     if failed_contracts:
         print()
         print(f"Contracts failing verification on {chain_label}:")
-        for component, contract_name in failed_contracts:
-            print(f"  - {component}/{contract_name}")
+        for component, contract_name, contract_address in failed_contracts:
+            print(f"  - {component}/{contract_name} {contract_address}")
 
     if pending_owner_contracts:
         print()

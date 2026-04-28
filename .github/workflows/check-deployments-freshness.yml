@@ -47,6 +47,8 @@ jobs:
           - bnb
           - injective
           - mainnet
+          - mantle
+          - megaeth
           - okx
           - optimism
           - xdc

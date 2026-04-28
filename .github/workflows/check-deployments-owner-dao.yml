@@ -61,6 +61,8 @@ jobs:
           - injective
           - ink
           - mainnet
+          - mantle
+          - megaeth
           - okx
           - optimism
           - xdc
@@ -89,6 +91,8 @@ jobs:
           - injective
           - ink
           - mainnet
+          - mantle
+          - megaeth
           - okx
           - optimism
           - xdc
@@ -117,6 +121,8 @@ jobs:
           - injective
           # - ink
           - mainnet
+          - mantle
+          - megaeth
           - okx
           - optimism
           - xdc

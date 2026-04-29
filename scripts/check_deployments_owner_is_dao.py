@@ -32,6 +32,7 @@ import os
 import re
 import sys
 from pathlib import Path
+from typing import Any
 
 # owner() selector: first 4 bytes of keccak256("owner()")
 OWNER_SELECTOR = "0x8da5cb5b"
@@ -109,7 +110,54 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Only list contracts and addresses, do not call RPC.",
     )
+    p.add_argument(
+        "--no-fail",
+        action="store_true",
+        help="Always return exit code 0 (useful when aggregating results in a separate CI job).",
+    )
+    p.add_argument(
+        "--output-json-file",
+        metavar="PATH",
+        help="Write machine-readable summary JSON to PATH.",
+    )
     return p.parse_args()
+
+
+def _write_json_report(
+    path: str,
+    *,
+    check_type: str,
+    chain: str,
+    chain_label: str,
+    skipped: int,
+    ok: int,
+    fail: int,
+    failed_contracts: list[tuple[str, str, str]],
+    pending_owner_contracts: list[tuple[str, str, str, str]],
+    error: str | None = None,
+) -> None:
+    data: dict[str, Any] = {
+        "check_type": check_type,
+        "chain": chain,
+        "chain_label": chain_label,
+        "summary": {"skipped": skipped, "ok": ok, "fail": fail},
+        "has_failure": bool(fail > 0 or error),
+        "failed_contracts": [
+            {"component": component, "contract_name": contract_name, "address": address}
+            for component, contract_name, address in failed_contracts
+        ],
+        "pending_owner_contracts": [
+            {
+                "component": component,
+                "contract_name": contract_name,
+                "address": address,
+                "pending_owner": pending_owner,
+            }
+            for component, contract_name, address, pending_owner in pending_owner_contracts
+        ],
+        "error": error,
+    }
+    Path(path).write_text(json.dumps(data, indent=2), encoding="utf-8")
 
 
 def load_common_addresses(repo_root: Path, chain: str) -> dict[str, str]:
@@ -281,6 +329,19 @@ def main() -> int:
     for c in components:
         if c not in COMPONENT_PATHS:
             print(f"Unknown component: {c}. Allowed: {list(COMPONENT_PATHS.keys())}", file=sys.stderr)
+            if args.output_json_file:
+                _write_json_report(
+                    args.output_json_file,
+                    check_type="owner",
+                    chain=chain,
+                    chain_label=CHAIN_DISPLAY_NAMES.get(chain, chain),
+                    skipped=0,
+                    ok=0,
+                    fail=1,
+                    failed_contracts=[],
+                    pending_owner_contracts=[],
+                    error=f"Unknown component: {c}",
+                )
             return 2
 
     repo_root = Path(__file__).resolve().parents[1]
@@ -288,6 +349,19 @@ def main() -> int:
     dao_addresses = get_dao_addresses(common_addresses)
     if not dao_addresses:
         print(f"DAO/DAO_OLD not found in common/addresses/{chain}.json", file=sys.stderr)
+        if args.output_json_file:
+            _write_json_report(
+                args.output_json_file,
+                check_type="owner",
+                chain=chain,
+                chain_label=CHAIN_DISPLAY_NAMES.get(chain, chain),
+                skipped=0,
+                ok=0,
+                fail=1,
+                failed_contracts=[],
+                pending_owner_contracts=[],
+                error=f"DAO/DAO_OLD not found in common/addresses/{chain}.json",
+            )
         return 2
 
     # Build reverse map: address -> key for reporting
@@ -298,11 +372,36 @@ def main() -> int:
     if not args.dry_run and not rpc_url:
         hint = rpc_env or f"RPC_<chain> (add {chain!r} to CHAIN_TO_RPC_ENV)"
         print(f"RPC URL not set. Use --rpc-url or set env {hint}", file=sys.stderr)
+        if args.output_json_file:
+            _write_json_report(
+                args.output_json_file,
+                check_type="owner",
+                chain=chain,
+                chain_label=CHAIN_DISPLAY_NAMES.get(chain, chain),
+                skipped=0,
+                ok=0,
+                fail=1,
+                failed_contracts=[],
+                pending_owner_contracts=[],
+                error=f"RPC URL not set. Use --rpc-url or set env {hint}",
+            )
         return 2
 
     deployments = collect_deployment_addresses(repo_root, chain, components)
     if not deployments:
         print(f"No deployments found for chain={chain}, components={components}", file=sys.stderr)
+        if args.output_json_file:
+            _write_json_report(
+                args.output_json_file,
+                check_type="owner",
+                chain=chain,
+                chain_label=CHAIN_DISPLAY_NAMES.get(chain, chain),
+                skipped=0,
+                ok=0,
+                fail=0,
+                failed_contracts=[],
+                pending_owner_contracts=[],
+            )
         return 0
 
     deployments.sort(key=lambda x: (x[0], x[1]))  # alphabetical: component, then contract name
@@ -331,8 +430,13 @@ def main() -> int:
 
         owner = eth_call_owner(rpc_url, address)
         if owner is None:
-            print(f"[skip] {component} {contract_name} owner() call failed")
-            skip_count += 1
+            print(
+                f"[FAIL] {component} {contract_name} owner() call failed for {address} "
+                "(ABI has owner(); RPC/access check failed)"
+            )
+            has_failure = True
+            fail_count += 1
+            failed_contracts.append((component, contract_name, address))
             continue
 
         if owner in dao_addresses:
@@ -362,6 +466,18 @@ def main() -> int:
 
     if args.dry_run:
         print(f"Dry-run: would check {len(deployments)} deployments for chain={chain}.")
+        if args.output_json_file:
+            _write_json_report(
+                args.output_json_file,
+                check_type="owner",
+                chain=chain,
+                chain_label=CHAIN_DISPLAY_NAMES.get(chain, chain),
+                skipped=skip_count,
+                ok=ok_count,
+                fail=fail_count,
+                failed_contracts=failed_contracts,
+                pending_owner_contracts=pending_owner_contracts,
+            )
         return 0
 
     print()
@@ -385,7 +501,20 @@ def main() -> int:
         print(f"Acceptance ownership method signature: acceptOwnership() {ACCEPT_OWNERSHIP_SELECTOR}")
         print()
 
-    return 1 if has_failure else 0
+    if args.output_json_file:
+        _write_json_report(
+            args.output_json_file,
+            check_type="owner",
+            chain=chain,
+            chain_label=chain_label,
+            skipped=skip_count,
+            ok=ok_count,
+            fail=fail_count,
+            failed_contracts=failed_contracts,
+            pending_owner_contracts=pending_owner_contracts,
+        )
+
+    return 1 if has_failure and not args.no_fail else 0
 
 
 if __name__ == "__main__":

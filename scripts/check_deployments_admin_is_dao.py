@@ -25,6 +25,7 @@ import json
 import os
 import sys
 from pathlib import Path
+from typing import Any
 
 # OpenZeppelin AccessControl: DEFAULT_ADMIN_ROLE = bytes32(0)
 DEFAULT_ADMIN_ROLE_HEX = "0" * 64
@@ -58,6 +59,23 @@ CHAIN_TO_RPC_ENV: dict[str, str] = {
     "xdc": "RPC_XDC",
 }
 
+# Chain folder name -> display name for summary lists
+CHAIN_DISPLAY_NAMES: dict[str, str] = {
+    "arbitrum_one": "Arbitrum",
+    "avalanche": "Avalanche",
+    "base": "Base",
+    "bnb": "BNB",
+    "injective": "Injective",
+    "ink": "Ink",
+    "mainnet": "Mainnet",
+    "mantle": "Mantle",
+    "megaeth": "MegaETH",
+    "okx": "OKX",
+    "optimism": "Optimism",
+    "sonic": "Sonic",
+    "xdc": "XDC",
+}
+
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(
@@ -67,7 +85,45 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--rpc-url", default=None, help="RPC URL. If not set, uses env from CHAIN_TO_RPC_ENV.")
     p.add_argument("--components", default="core,oracle,vaults", help="Comma-separated: core, oracle, vaults.")
     p.add_argument("--dry-run", action="store_true", help="Only list contracts, do not call RPC.")
+    p.add_argument(
+        "--no-fail",
+        action="store_true",
+        help="Always return exit code 0 (useful when aggregating results in a separate CI job).",
+    )
+    p.add_argument(
+        "--output-json-file",
+        metavar="PATH",
+        help="Write machine-readable summary JSON to PATH.",
+    )
     return p.parse_args()
+
+
+def _write_json_report(
+    path: str,
+    *,
+    check_type: str,
+    chain: str,
+    chain_label: str,
+    skipped: int,
+    ok: int,
+    fail: int,
+    failed_contracts: list[tuple[str, str, str]],
+    error: str | None = None,
+) -> None:
+    data: dict[str, Any] = {
+        "check_type": check_type,
+        "chain": chain,
+        "chain_label": chain_label,
+        "summary": {"skipped": skipped, "ok": ok, "fail": fail},
+        "has_failure": bool(fail > 0 or error),
+        "failed_contracts": [
+            {"component": component, "contract_name": contract_name, "address": address}
+            for component, contract_name, address in failed_contracts
+        ],
+        "pending_owner_contracts": [],
+        "error": error,
+    }
+    Path(path).write_text(json.dumps(data, indent=2), encoding="utf-8")
 
 
 def load_common_addresses(repo_root: Path, chain: str) -> dict[str, str]:
@@ -203,6 +259,18 @@ def main() -> int:
     for c in components:
         if c not in COMPONENT_PATHS:
             print(f"Unknown component: {c}. Allowed: {list(COMPONENT_PATHS.keys())}", file=sys.stderr)
+            if args.output_json_file:
+                _write_json_report(
+                    args.output_json_file,
+                    check_type="admin",
+                    chain=chain,
+                    chain_label=CHAIN_DISPLAY_NAMES.get(chain, chain),
+                    skipped=0,
+                    ok=0,
+                    fail=1,
+                    failed_contracts=[],
+                    error=f"Unknown component: {c}",
+                )
             return 2
 
     repo_root = Path(__file__).resolve().parents[1]
@@ -210,6 +278,18 @@ def main() -> int:
     dao_addresses = get_dao_addresses(common_addresses)
     if not dao_addresses:
         print(f"DAO/DAO_OLD not found in common/addresses/{chain}.json", file=sys.stderr)
+        if args.output_json_file:
+            _write_json_report(
+                args.output_json_file,
+                check_type="admin",
+                chain=chain,
+                chain_label=CHAIN_DISPLAY_NAMES.get(chain, chain),
+                skipped=0,
+                ok=0,
+                fail=1,
+                failed_contracts=[],
+                error=f"DAO/DAO_OLD not found in common/addresses/{chain}.json",
+            )
         return 2
 
     addr_to_key: dict[str, str] = {addr: key for key, addr in common_addresses.items()}
@@ -219,11 +299,34 @@ def main() -> int:
     if not args.dry_run and not rpc_url:
         hint = rpc_env or f"RPC_<chain> (add {chain!r} to CHAIN_TO_RPC_ENV)"
         print(f"RPC URL not set. Use --rpc-url or set env {hint}", file=sys.stderr)
+        if args.output_json_file:
+            _write_json_report(
+                args.output_json_file,
+                check_type="admin",
+                chain=chain,
+                chain_label=CHAIN_DISPLAY_NAMES.get(chain, chain),
+                skipped=0,
+                ok=0,
+                fail=1,
+                failed_contracts=[],
+                error=f"RPC URL not set. Use --rpc-url or set env {hint}",
+            )
         return 2
 
     deployments = collect_deployment_addresses(repo_root, chain, components)
     if not deployments:
         print(f"No deployments found for chain={chain}, components={components}", file=sys.stderr)
+        if args.output_json_file:
+            _write_json_report(
+                args.output_json_file,
+                check_type="admin",
+                chain=chain,
+                chain_label=CHAIN_DISPLAY_NAMES.get(chain, chain),
+                skipped=0,
+                ok=0,
+                fail=0,
+                failed_contracts=[],
+            )
         return 0
 
     deployments.sort(key=lambda x: (x[0], x[1]))  # alphabetical: component, then contract name
@@ -251,8 +354,13 @@ def main() -> int:
 
         admin = eth_call_admin(rpc_url, address)
         if admin is None:
-            print(f"[skip] {component} {contract_name} getRoleMember call failed")
-            skip_count += 1
+            print(
+                f"[FAIL] {component} {contract_name} getRoleMember/getRoleMemberCount call failed for {address} "
+                "(ABI has AccessControlEnumerable; RPC/access check failed)"
+            )
+            has_failure = True
+            fail_count += 1
+            failed_contracts.append((component, contract_name, address))
             continue
 
         if admin in dao_addresses:
@@ -274,6 +382,17 @@ def main() -> int:
 
     if args.dry_run:
         print(f"Dry-run: would check {len(deployments)} deployments for chain={chain}.")
+        if args.output_json_file:
+            _write_json_report(
+                args.output_json_file,
+                check_type="admin",
+                chain=chain,
+                chain_label=CHAIN_DISPLAY_NAMES.get(chain, chain),
+                skipped=skip_count,
+                ok=ok_count,
+                fail=fail_count,
+                failed_contracts=failed_contracts,
+            )
         return 0
 
     print(f"Summary: skipped={skip_count} ok={ok_count} fail={fail_count}")
@@ -281,7 +400,20 @@ def main() -> int:
         print("Contracts failing verification:")
         for component, contract_name, contract_address in failed_contracts:
             print(f"  - {component}/{contract_name} {contract_address}")
-    return 1 if has_failure else 0
+
+    if args.output_json_file:
+        _write_json_report(
+            args.output_json_file,
+            check_type="admin",
+            chain=chain,
+            chain_label=CHAIN_DISPLAY_NAMES.get(chain, chain),
+            skipped=skip_count,
+            ok=ok_count,
+            fail=fail_count,
+            failed_contracts=failed_contracts,
+        )
+
+    return 1 if has_failure and not args.no_fail else 0
 
 
 if __name__ == "__main__":

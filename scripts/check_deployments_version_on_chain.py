@@ -22,6 +22,7 @@ import os
 import re
 import sys
 from pathlib import Path
+from typing import Any
 
 # getVersions(address[]) selector
 GET_VERSIONS_SELECTOR = "0xf58e82b5"
@@ -74,6 +75,22 @@ CHAIN_TO_RPC_ENV: dict[str, str] = {
     "xdc": "RPC_XDC",
 }
 
+CHAIN_DISPLAY_NAMES: dict[str, str] = {
+    "arbitrum_one": "Arbitrum",
+    "avalanche": "Avalanche",
+    "base": "Base",
+    "bnb": "BNB",
+    "injective": "Injective",
+    "ink": "Ink",
+    "mainnet": "Mainnet",
+    "mantle": "Mantle",
+    "megaeth": "MegaETH",
+    "okx": "OKX",
+    "optimism": "Optimism",
+    "sonic": "Sonic",
+    "xdc": "XDC",
+}
+
 # Regex: constant VERSION = "Name X.Y.Z"; or (in VERSION function) return "Name X.Y.Z";
 _RE_VERSION_CONST = re.compile(r'VERSION\s*=\s*"([^"]+)"\s*;', re.MULTILINE)
 # After "function VERSION(...)" find return "..." within the same function (next ~400 chars)
@@ -109,7 +126,45 @@ def parse_args() -> argparse.Namespace:
     )
     p.add_argument("--dry-run", action="store_true", help="Only list contracts and expected versions, no RPC.")
     p.add_argument("--verbose", action="store_true", help="Print raw RPC response on getVersions (for debugging read failed).")
+    p.add_argument(
+        "--no-fail",
+        action="store_true",
+        help="Always return exit code 0 (useful when aggregating results in a separate CI job).",
+    )
+    p.add_argument(
+        "--output-json-file",
+        metavar="PATH",
+        help="Write machine-readable summary JSON to PATH.",
+    )
     return p.parse_args()
+
+
+def _write_json_report(
+    path: str,
+    *,
+    check_type: str,
+    chain: str,
+    chain_label: str,
+    skipped: int,
+    ok: int,
+    fail: int,
+    failed_contracts: list[tuple[str, str, str]],
+    error: str | None = None,
+) -> None:
+    data: dict[str, Any] = {
+        "check_type": check_type,
+        "chain": chain,
+        "chain_label": chain_label,
+        "summary": {"skipped": skipped, "ok": ok, "fail": fail},
+        "has_failure": bool(fail > 0 or error),
+        "failed_contracts": [
+            {"component": component, "contract_name": contract_name, "address": address}
+            for component, contract_name, address in failed_contracts
+        ],
+        "pending_owner_contracts": [],
+        "error": error,
+    }
+    Path(path).write_text(json.dumps(data, indent=2), encoding="utf-8")
 
 
 def find_contract_source(repo_root: Path, contract_name: str, contracts_root: Path) -> Path | None:
@@ -389,6 +444,18 @@ def main() -> int:
     for c in components:
         if c not in COMPONENT_PATHS:
             print(f"Unknown component: {c}. Allowed: {list(COMPONENT_PATHS.keys())}", file=sys.stderr)
+            if args.output_json_file:
+                _write_json_report(
+                    args.output_json_file,
+                    check_type="version",
+                    chain=chain,
+                    chain_label=CHAIN_DISPLAY_NAMES.get(chain, chain),
+                    skipped=0,
+                    ok=0,
+                    fail=1,
+                    failed_contracts=[],
+                    error=f"Unknown component: {c}",
+                )
             return 2
 
     rpc_env = CHAIN_TO_RPC_ENV.get(chain)
@@ -396,6 +463,18 @@ def main() -> int:
     if not args.dry_run and not rpc_url:
         hint = rpc_env or f"RPC_<chain>"
         print(f"RPC URL not set. Use --rpc-url or set env {hint}", file=sys.stderr)
+        if args.output_json_file:
+            _write_json_report(
+                args.output_json_file,
+                check_type="version",
+                chain=chain,
+                chain_label=CHAIN_DISPLAY_NAMES.get(chain, chain),
+                skipped=0,
+                ok=0,
+                fail=1,
+                failed_contracts=[],
+                error=f"RPC URL not set. Use --rpc-url or set env {hint}",
+            )
         return 2
 
     all_deployments: list[tuple[str, str, str]] = []
@@ -411,11 +490,34 @@ def main() -> int:
 
     if not all_deployments:
         print(f"No deployments found for chain={chain}, components={components}", file=sys.stderr)
+        if args.output_json_file:
+            _write_json_report(
+                args.output_json_file,
+                check_type="version",
+                chain=chain,
+                chain_label=CHAIN_DISPLAY_NAMES.get(chain, chain),
+                skipped=0,
+                ok=0,
+                fail=0,
+                failed_contracts=[],
+            )
         return 0
 
     silo_lens = get_silo_lens_address(repo_root, chain)
     if not args.dry_run and not silo_lens:
         print(f"SiloLens not deployed for chain={chain}", file=sys.stderr)
+        if args.output_json_file:
+            _write_json_report(
+                args.output_json_file,
+                check_type="version",
+                chain=chain,
+                chain_label=CHAIN_DISPLAY_NAMES.get(chain, chain),
+                skipped=0,
+                ok=0,
+                fail=1,
+                failed_contracts=[],
+                error=f"SiloLens not deployed for chain={chain}",
+            )
         return 2
     if args.verbose and not args.dry_run:
         rpc_display = (rpc_url[:50] + "..." if rpc_url and len(rpc_url) > 50 else rpc_url) if rpc_url else "(none)"
@@ -670,6 +772,17 @@ def main() -> int:
 
     if args.dry_run:
         print(f"Dry-run: {len(expected_by_key)} versioned, {len(all_deployments) - len(expected_by_key)} skipped.")
+        if args.output_json_file:
+            _write_json_report(
+                args.output_json_file,
+                check_type="version",
+                chain=chain,
+                chain_label=CHAIN_DISPLAY_NAMES.get(chain, chain),
+                skipped=skip_count,
+                ok=ok_count,
+                fail=fail_count,
+                failed_contracts=failed_contracts,
+            )
         return 0
 
     print()
@@ -683,7 +796,19 @@ def main() -> int:
             print(f"  - {component}/{display_name}, {address}")
         print()
 
-    return 1 if has_failure else 0
+    if args.output_json_file:
+        _write_json_report(
+            args.output_json_file,
+            check_type="version",
+            chain=chain,
+            chain_label=CHAIN_DISPLAY_NAMES.get(chain, chain),
+            skipped=skip_count,
+            ok=ok_count,
+            fail=fail_count,
+            failed_contracts=failed_contracts,
+        )
+
+    return 1 if has_failure and not args.no_fail else 0
 
 
 if __name__ == "__main__":

@@ -5,12 +5,15 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
-### Added
-- Mentle deployment
+
+## [4.11.1] - 2026-04-28
+### Fixed
+- ensure ci is executed for MegaETH and Mantle
 
 ## [4.11.0] - 2026-04-27
 ### Added
 - MegaETH deployment
+- Mentle deployment
 
 ## [4.10.0] - 2026-04-22
 ### Added

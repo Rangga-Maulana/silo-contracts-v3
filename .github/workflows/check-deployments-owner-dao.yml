@@ -15,6 +15,7 @@ on:
       - scripts/check_deployments_owner_is_dao.py
       - scripts/check_deployments_admin_is_dao.py
       - scripts/check_deployments_version_on_chain.py
+      - scripts/merge_onchain_reports.py
       - .github/workflows/check-deployments-owner-dao.yml
   pull_request:
     branches: ['**']  # any PR – run whenever deployment paths change
@@ -26,6 +27,7 @@ on:
       - scripts/check_deployments_owner_is_dao.py
       - scripts/check_deployments_admin_is_dao.py
       - scripts/check_deployments_version_on_chain.py
+      - scripts/merge_onchain_reports.py
       - .github/workflows/check-deployments-owner-dao.yml
 
 concurrency:
@@ -38,7 +40,6 @@ env:
   RPC_OPTIMISM: ${{ secrets.RPC_OPTIMISM }}
   RPC_SONIC: ${{ secrets.RPC_SONIC }}
   RPC_AVALANCHE: ${{ secrets.RPC_AVALANCHE }}
-  RPC_INK: ${{ secrets.RPC_INK }}
   RPC_BASE: ${{ secrets.RPC_BASE }}
   RPC_BNB: ${{ secrets.RPC_BNB }}
   RPC_OKX: ${{ secrets.RPC_OKX }}
@@ -59,8 +60,9 @@ jobs:
           - base
           - bnb
           - injective
-          - ink
           - mainnet
+          - mantle
+          - megaeth
           - okx
           - optimism
           - xdc
@@ -74,7 +76,21 @@ jobs:
           python-version: "3.12"
 
       - name: Check if owners are DAO (${{ matrix.chain }})
-        run: python3 scripts/check_deployments_owner_is_dao.py --chain ${{ matrix.chain }}
+        run: |
+          set +e
+          python3 scripts/check_deployments_owner_is_dao.py \
+            --chain ${{ matrix.chain }} \
+            --output-json-file onchain_owner_${{ matrix.chain }}.json
+          RC=$?
+          set -e
+          test -f onchain_owner_${{ matrix.chain }}.json || echo '{"check_type":"owner","chain":"${{ matrix.chain }}","chain_label":"${{ matrix.chain }}","summary":{"skipped":0,"ok":0,"fail":1},"has_failure":true,"failed_contracts":[],"pending_owner_contracts":[],"error":"owner check job failed before writing report"}' > onchain_owner_${{ matrix.chain }}.json
+          exit $RC
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: onchain-owner-${{ matrix.chain }}
+          path: onchain_owner_${{ matrix.chain }}.json
 
   admin-is-dao:
     runs-on: ubuntu-latest
@@ -87,8 +103,9 @@ jobs:
           - base
           - bnb
           - injective
-          - ink
           - mainnet
+          - mantle
+          - megaeth
           - okx
           - optimism
           - xdc
@@ -102,7 +119,21 @@ jobs:
           python-version: "3.12"
 
       - name: Check if admins are DAO (${{ matrix.chain }})
-        run: python3 scripts/check_deployments_admin_is_dao.py --chain ${{ matrix.chain }}
+        run: |
+          set +e
+          python3 scripts/check_deployments_admin_is_dao.py \
+            --chain ${{ matrix.chain }} \
+            --output-json-file onchain_admin_${{ matrix.chain }}.json
+          RC=$?
+          set -e
+          test -f onchain_admin_${{ matrix.chain }}.json || echo '{"check_type":"admin","chain":"${{ matrix.chain }}","chain_label":"${{ matrix.chain }}","summary":{"skipped":0,"ok":0,"fail":1},"has_failure":true,"failed_contracts":[],"pending_owner_contracts":[],"error":"admin check job failed before writing report"}' > onchain_admin_${{ matrix.chain }}.json
+          exit $RC
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: onchain-admin-${{ matrix.chain }}
+          path: onchain_admin_${{ matrix.chain }}.json
 
   version-on-chain:
     runs-on: ubuntu-latest
@@ -115,8 +146,9 @@ jobs:
           - base
           - bnb
           - injective
-          # - ink
           - mainnet
+          - mantle
+          - megaeth
           - okx
           - optimism
           - xdc
@@ -130,4 +162,164 @@ jobs:
           python-version: "3.12"
 
       - name: Version on-chain (${{ matrix.chain }})
-        run: python3 scripts/check_deployments_version_on_chain.py --chain ${{ matrix.chain }}
+        run: |
+          set +e
+          python3 scripts/check_deployments_version_on_chain.py \
+            --chain ${{ matrix.chain }} \
+            --output-json-file onchain_version_${{ matrix.chain }}.json
+          RC=$?
+          set -e
+          test -f onchain_version_${{ matrix.chain }}.json || echo '{"check_type":"version","chain":"${{ matrix.chain }}","chain_label":"${{ matrix.chain }}","summary":{"skipped":0,"ok":0,"fail":1},"has_failure":true,"failed_contracts":[],"pending_owner_contracts":[],"error":"version check job failed before writing report"}' > onchain_version_${{ matrix.chain }}.json
+          exit $RC
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: onchain-version-${{ matrix.chain }}
+          path: onchain_version_${{ matrix.chain }}.json
+
+  aggregate-and-comment:
+    name: Aggregate on-chain checks and comment
+    needs: [owner-is-dao, admin-is-dao, version-on-chain]
+    if: always()
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: onchain-*
+          path: onchain-artifacts
+
+      - name: Merge on-chain reports
+        run: |
+          if [ -f scripts/merge_onchain_reports.py ]; then
+            python3 scripts/merge_onchain_reports.py \
+              --artifacts-dir onchain-artifacts \
+              --output onchain_comment.md \
+              --status-file onchain_status.json
+          else
+            echo "scripts/merge_onchain_reports.py not found in checkout, using inline fallback merger"
+            python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          artifacts_dir = Path("onchain-artifacts")
+          reports = []
+          for jf in artifacts_dir.glob("**/*.json"):
+              try:
+                  data = json.loads(jf.read_text(encoding="utf-8"))
+              except (OSError, json.JSONDecodeError):
+                  continue
+              if isinstance(data, dict) and data.get("check_type") in {"owner", "admin", "version"}:
+                  reports.append(data)
+
+          failing = [r for r in reports if bool(r.get("has_failure"))]
+          Path("onchain_status.json").write_text(
+              json.dumps({"has_failures": bool(failing)}, indent=2),
+              encoding="utf-8",
+          )
+
+          if not failing:
+              Path("onchain_comment.md").write_text("", encoding="utf-8")
+              raise SystemExit(0)
+
+          check_labels = {
+              "owner": "Owner Is DAO",
+              "admin": "Admin Is DAO",
+              "version": "Version On Chain",
+          }
+          check_order = ["owner", "admin", "version"]
+          chain_order = [
+              "Arbitrum", "Avalanche", "Base", "BNB", "Injective", "Ink",
+              "Mainnet", "Mantle", "MegaETH", "OKX", "Optimism", "Sonic", "XDC",
+          ]
+
+          def chain_rank(label: str):
+              try:
+                  return (chain_order.index(label), label)
+              except ValueError:
+                  return (len(chain_order), label)
+
+          grouped = {k: [] for k in check_order}
+          for report in failing:
+              grouped[str(report.get("check_type"))].append(report)
+
+          lines = [
+              "<!-- ONCHAIN_CHECKS_REPORT -->",
+              "## On-chain deployment checks",
+              "",
+          ]
+
+          for check in check_order:
+              check_reports = grouped.get(check, [])
+              if not check_reports:
+                  continue
+              lines.append(f"### {check_labels[check]}")
+              lines.append("")
+              check_reports.sort(key=lambda r: chain_rank(str(r.get("chain_label", r.get("chain", "")))))
+              for report in check_reports:
+                  chain_label = str(report.get("chain_label", report.get("chain", "unknown")))
+                  summary = report.get("summary", {}) if isinstance(report.get("summary"), dict) else {}
+                  fail_count = int(summary.get("fail", 0))
+                  lines.append(f"#### {chain_label}")
+                  lines.append("")
+                  if report.get("error"):
+                      lines.append(f"- **Error:** {report['error']}")
+                  lines.append(f"- **Fail count:** {fail_count}")
+                  lines.append("")
+                  failed_contracts = report.get("failed_contracts", [])
+                  if isinstance(failed_contracts, list) and failed_contracts:
+                      lines.append("**Contracts failing verification:**")
+                      lines.append("")
+                      for c in failed_contracts:
+                          if not isinstance(c, dict):
+                              continue
+                          lines.append(f"- `{c.get('component','')}/{c.get('contract_name','')}` `{c.get('address','')}`")
+                      lines.append("")
+              lines.append("")
+
+          lines.append("<!-- /ONCHAIN_CHECKS_REPORT -->")
+          Path("onchain_comment.md").write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
+          PY
+          fi
+
+      - name: Read merge status
+        id: merge-status
+        run: |
+          HAS_FAILURES=$(python3 - <<'PY'
+          import json
+          from pathlib import Path
+          data = json.loads(Path("onchain_status.json").read_text(encoding="utf-8"))
+          print("true" if data.get("has_failures") else "false")
+          PY
+          )
+          echo "has_failures=$HAS_FAILURES" >> "$GITHUB_OUTPUT"
+
+      - name: Upsert on-chain failures comment
+        if: github.event_name == 'pull_request' && steps.merge-status.outputs.has_failures == 'true'
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: onchain-checks
+          path: onchain_comment.md
+
+      - name: Delete on-chain failures comment when all green
+        if: github.event_name == 'pull_request' && steps.merge-status.outputs.has_failures != 'true'
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: onchain-checks
+          delete: true
+
+      - name: Fail workflow when on-chain checks failed
+        if: steps.merge-status.outputs.has_failures == 'true'
+        run: |
+          echo "On-chain checks failed. See consolidated summary above."
+          exit 1

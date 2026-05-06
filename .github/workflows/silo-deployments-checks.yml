@@ -11,7 +11,6 @@ env:
     RPC_SONIC: ${{ secrets.RPC_SONIC }}
     RPC_AVALANCHE: ${{ secrets.RPC_AVALANCHE }}
     RPC_INJECTIVE: ${{ secrets.RPC_INJECTIVE }}
-    RPC_INK: ${{ secrets.RPC_INK }}
     RPC_XDC: ${{ secrets.RPC_XDC }}
     RPC_MANTLE: ${{ secrets.RPC_MANTLE }}
     RPC_MEGAETH: ${{ secrets.RPC_MEGAETH }}

@@ -234,6 +234,15 @@ jobs:
           VERIFY_EXIT=$?
           set -e
 
+          # Some RPC providers may return HTTP 403 while Forge keeps running and checks are reported as skipped.
+          # Treat any RPC authorization/rate-limit 403 signature as a hard CI failure.
+          if grep -Eiq \
+            '403[[:space:]]+forbidden|error code[[:space:]]*:?[[:space:]]*403|server returned an error response.*403|http status.*403|response status code[[:space:]]*403' \
+            output.log; then
+            echo "::error title=RPC 403 Forbidden::Detected RPC 403 response in verify logs."
+            VERIFY_EXIT=1
+          fi
+
           echo '```' > result.txt
           echo "Time: $(date -u '+%Y-%m-%d %H:%M:%S') UTC" >> result.txt
           echo "Commit: ${{ github.sha }}" >> result.txt
@@ -275,6 +284,14 @@ jobs:
           > live_market_qa.log 2>&1
           TEST_EXIT_CODE=$?
           set -e  # Re-enable exit on error
+
+          # Ensure RPC 403 is never interpreted as a soft/skip outcome.
+          if grep -Eiq \
+            '403[[:space:]]+forbidden|error code[[:space:]]*:?[[:space:]]*403|server returned an error response.*403|http status.*403|response status code[[:space:]]*403' \
+            live_market_qa.log; then
+            echo "::error title=RPC 403 Forbidden::Detected RPC 403 response in LIVE MARKET QA logs."
+            TEST_EXIT_CODE=1
+          fi
           
           # Create result file
           echo '```' > live_market_qa_result.txt

@@ -10,7 +10,6 @@ env:
     RPC_SONIC: ${{ secrets.RPC_SONIC }}
     RPC_AVALANCHE: ${{ secrets.RPC_AVALANCHE }}
     RPC_INJECTIVE: ${{ secrets.RPC_INJECTIVE }}
-    RPC_INK: ${{ secrets.RPC_INK }}
     RPC_BNB: ${{ secrets.RPC_BNB }}
     RPC_BASE: ${{ secrets.RPC_BASE }}
     RPC_OKX: ${{ secrets.RPC_OKX }}
@@ -47,11 +46,12 @@ jobs:
                     - RPC_AVALANCHE
                     - RPC_MAINNET
                     - RPC_INJECTIVE
-                    - RPC_INK
                     - RPC_BNB
                     - RPC_BASE
                     - RPC_OKX
                     - RPC_XDC
+                    - RPC_MANTLE
+                    - RPC_MEGAETH
 
         runs-on: ubuntu-latest
         steps:

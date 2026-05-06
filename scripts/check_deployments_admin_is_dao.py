@@ -34,6 +34,10 @@ DEFAULT_ADMIN_ROLE_HEX = "0" * 64
 GET_ROLE_MEMBER_COUNT_SELECTOR = "0xca15c873"
 # getRoleMember(bytes32,uint256) selector
 GET_ROLE_MEMBER_SELECTOR = "0x9010d07c"
+# EIP-1967 slots
+EIP1967_IMPLEMENTATION_SLOT = "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc"
+EIP1967_ADMIN_SLOT = "0xb53127684a568b3173ae13b9f8a6016e243e63b6e8ee1178d6a717850b5d6103"
+EIP1967_BEACON_SLOT = "0xa3f0ad74e5423aebfd80d3ef4346578335a9a72aeaee59ff6cb3582b35133d50"
 
 COMPONENT_PATHS = {
     "core": "silo-core/deployments",
@@ -193,13 +197,33 @@ def collect_deployment_addresses(
     return out
 
 
-def _eth_call(rpc_url: str, to: str, data: str) -> str | None:
-    to = to if to.startswith("0x") else "0x" + to
+def _format_rpc_error(err: Any) -> str:
+    """Format JSON-RPC error object into a concise, human-readable string."""
+    if isinstance(err, dict):
+        code = err.get("code")
+        msg = err.get("message")
+        data = err.get("data")
+        parts: list[str] = []
+        if code is not None:
+            parts.append(f"code={code}")
+        if msg:
+            parts.append(f"message={msg}")
+        if data is not None:
+            data_str = str(data)
+            if len(data_str) > 180:
+                data_str = data_str[:177] + "..."
+            parts.append(f"data={data_str}")
+        return ", ".join(parts) if parts else str(err)
+    return str(err)
+
+
+def _rpc_request(rpc_url: str, method: str, params: list[Any]) -> tuple[dict[str, Any] | None, str | None]:
+    """Perform a JSON-RPC request and return (body, error_reason)."""
     payload = {
         "jsonrpc": "2.0",
         "id": 1,
-        "method": "eth_call",
-        "params": [{"to": to, "data": data}, "latest"],
+        "method": method,
+        "params": params,
     }
     try:
         from urllib.request import Request, urlopen
@@ -213,43 +237,114 @@ def _eth_call(rpc_url: str, to: str, data: str) -> str | None:
         )
         with urlopen(req, timeout=30) as resp:
             body = json.loads(resp.read().decode("utf-8"))
-    except (HTTPError, URLError, OSError, json.JSONDecodeError, KeyError):
-        return None
+    except HTTPError as e:
+        status = getattr(e, "code", "unknown")
+        return None, f"http_error status={status} reason={e.reason}"
+    except URLError as e:
+        return None, f"url_error reason={e.reason}"
+    except TimeoutError as e:
+        return None, f"timeout_error {e}"
+    except (OSError, json.JSONDecodeError, KeyError) as e:
+        return None, f"transport_or_decode_error {e}"
+    return body, None
+
+
+def _eth_call(rpc_url: str, to: str, data: str) -> tuple[str | None, str | None]:
+    to = to if to.startswith("0x") else "0x" + to
+    body, req_err = _rpc_request(rpc_url, "eth_call", [{"to": to, "data": data}, "latest"])
+    if req_err:
+        return None, req_err
+    if body is None:
+        return None, "empty_response"
     if body.get("error"):
-        return None
+        return None, f"rpc_error {_format_rpc_error(body.get('error'))}"
     result = (body.get("result") or "").strip()
-    return result if result else None
+    if not result:
+        return None, "empty_result"
+    return result, None
 
 
-def eth_call_admin(rpc_url: str, contract_address: str) -> str | None:
+def _extract_address_from_32byte_hex(value: str | None) -> str | None:
+    """Extract address from 32-byte hex word (last 20 bytes)."""
+    if not value or not isinstance(value, str):
+        return None
+    data = value.strip().lower()
+    if not data.startswith("0x"):
+        return None
+    hex_part = data[2:]
+    if len(hex_part) != 64:
+        return None
+    addr = "0x" + hex_part[-40:]
+    if addr == "0x" + "0" * 40:
+        return None
+    return addr
+
+
+def detect_proxy_info(rpc_url: str, contract_address: str) -> tuple[bool, str]:
+    """
+    Probe proxy-related storage slots (EIP-1967).
+    Returns (is_proxy, details_string).
+    """
+    addr = contract_address if contract_address.startswith("0x") else "0x" + contract_address
+    impl_body, impl_req_err = _rpc_request(rpc_url, "eth_getStorageAt", [addr, EIP1967_IMPLEMENTATION_SLOT, "latest"])
+    if impl_req_err:
+        return False, f"proxy_probe_failed ({impl_req_err})"
+    if impl_body is None:
+        return False, "proxy_probe_failed (empty_response)"
+    if impl_body.get("error"):
+        return False, f"proxy_probe_failed (rpc_error {_format_rpc_error(impl_body.get('error'))})"
+
+    impl = _extract_address_from_32byte_hex(impl_body.get("result"))
+
+    admin = None
+    admin_body, admin_req_err = _rpc_request(rpc_url, "eth_getStorageAt", [addr, EIP1967_ADMIN_SLOT, "latest"])
+    if not admin_req_err and admin_body and not admin_body.get("error"):
+        admin = _extract_address_from_32byte_hex(admin_body.get("result"))
+
+    beacon = None
+    beacon_body, beacon_req_err = _rpc_request(rpc_url, "eth_getStorageAt", [addr, EIP1967_BEACON_SLOT, "latest"])
+    if not beacon_req_err and beacon_body and not beacon_body.get("error"):
+        beacon = _extract_address_from_32byte_hex(beacon_body.get("result"))
+
+    if impl or beacon:
+        return True, f"is_proxy implementation={impl or 'none'} admin={admin or 'none'} beacon={beacon or 'none'}"
+
+    return False, "not_proxy_eip1967_slots_empty"
+
+
+def eth_call_admin(rpc_url: str, contract_address: str) -> tuple[str | None, str | None]:
     """
     Get first DEFAULT_ADMIN_ROLE holder via getRoleMemberCount + getRoleMember.
-    Returns address (lowercase) or None if contract has no AccessControlEnumerable / revert.
+    Returns (address, error_reason).
+    address is lowercase when available, otherwise None.
+    error_reason is present only when address is None.
     """
     # getRoleMemberCount(DEFAULT_ADMIN_ROLE): selector + bytes32(0)
     data_count = GET_ROLE_MEMBER_COUNT_SELECTOR + DEFAULT_ADMIN_ROLE_HEX
-    result = _eth_call(rpc_url, contract_address, data_count)
+    result, call_err = _eth_call(rpc_url, contract_address, data_count)
     if result is None:
-        return None
+        return None, f"admin_count_call_failed ({call_err or 'unknown'})"
     # uint256: 32 bytes = 64 hex chars
     if len(result) < 64:
-        return None
+        return None, f"invalid_admin_count_result len={len(result)} value={result[:60]}"
     count_hex = result[-64:]
     try:
         count = int(count_hex, 16)
     except ValueError:
-        return None
+        return None, f"invalid_admin_count_hex {count_hex}"
     if count == 0:
-        return None
+        return None, "admin_role_empty_or_zero"
     # getRoleMember(DEFAULT_ADMIN_ROLE, 0): selector + role (32 bytes) + index (32 bytes = 0)
     data_member = GET_ROLE_MEMBER_SELECTOR + DEFAULT_ADMIN_ROLE_HEX + "0" * 64
-    result = _eth_call(rpc_url, contract_address, data_member)
-    if result is None or len(result) < 64:
-        return None
+    result, call_err = _eth_call(rpc_url, contract_address, data_member)
+    if result is None:
+        return None, f"admin_member_call_failed ({call_err or 'unknown'})"
+    if len(result) < 64:
+        return None, f"invalid_admin_member_result len={len(result)} value={result[:60]}"
     addr = "0x" + result[-40:].lower()
     if addr == "0x" + "0" * 40:
-        return None
-    return addr
+        return None, "admin_role_empty_or_zero"
+    return addr, None
 
 
 def main() -> int:
@@ -352,12 +447,29 @@ def main() -> int:
             skip_count += 1
             continue
 
-        admin = eth_call_admin(rpc_url, address)
+        admin, admin_err = eth_call_admin(rpc_url, address)
         if admin is None:
-            print(
-                f"[FAIL] {component} {contract_name} getRoleMember/getRoleMemberCount call failed for {address} "
-                "(ABI has AccessControlEnumerable; RPC/access check failed)"
-            )
+            is_silo_hook = contract_name.startswith("SiloHook")
+            if admin_err == "admin_role_empty_or_zero" and is_silo_hook:
+                is_proxy, proxy_details = detect_proxy_info(rpc_url, address)
+                if not is_proxy:
+                    print(
+                        f"[ ok ] {component} {contract_name} admin role is empty/zero "
+                        "(allowed for non-proxy SiloHook implementation)"
+                    )
+                    print(f"       -> proxy_check: {proxy_details}")
+                    ok_count += 1
+                    continue
+                print(
+                    f"[FAIL] {component} {contract_name} admin check failed for {address} "
+                    f"(ABI has AccessControlEnumerable; reason: admin_role_empty_or_zero; "
+                    f"proxy_check: proxy; {proxy_details})"
+                )
+            else:
+                print(
+                    f"[FAIL] {component} {contract_name} admin check failed for {address} "
+                    f"(ABI has AccessControlEnumerable; reason: {admin_err or 'unknown'})"
+                )
             has_failure = True
             fail_count += 1
             failed_contracts.append((component, contract_name, address))

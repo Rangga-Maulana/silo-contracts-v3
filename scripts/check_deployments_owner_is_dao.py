@@ -29,9 +29,10 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import re
 import sys
 from pathlib import Path
+from typing import Any
+from rpc_multicall import format_rpc_error, multicall_eth_calls, rpc_batch_request, rpc_preflight
 
 # owner() selector: first 4 bytes of keccak256("owner()")
 OWNER_SELECTOR = "0x8da5cb5b"
@@ -39,6 +40,10 @@ OWNER_SELECTOR = "0x8da5cb5b"
 PENDING_OWNER_SELECTOR = "0xe30c3978"
 # acceptOwnership() selector (Ownable2Step)
 ACCEPT_OWNERSHIP_SELECTOR = "0x79ba5097"
+# EIP-1967 slots
+EIP1967_IMPLEMENTATION_SLOT = "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc"
+EIP1967_ADMIN_SLOT = "0xb53127684a568b3173ae13b9f8a6016e243e63b6e8ee1178d6a717850b5d6103"
+EIP1967_BEACON_SLOT = "0xa3f0ad74e5423aebfd80d3ef4346578335a9a72aeaee59ff6cb3582b35133d50"
 
 # Component name -> deployments path relative to repo root
 COMPONENT_PATHS = {
@@ -109,7 +114,54 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Only list contracts and addresses, do not call RPC.",
     )
+    p.add_argument(
+        "--no-fail",
+        action="store_true",
+        help="Always return exit code 0 (useful when aggregating results in a separate CI job).",
+    )
+    p.add_argument(
+        "--output-json-file",
+        metavar="PATH",
+        help="Write machine-readable summary JSON to PATH.",
+    )
     return p.parse_args()
+
+
+def _write_json_report(
+    path: str,
+    *,
+    check_type: str,
+    chain: str,
+    chain_label: str,
+    skipped: int,
+    ok: int,
+    fail: int,
+    failed_contracts: list[tuple[str, str, str]],
+    pending_owner_contracts: list[tuple[str, str, str, str]],
+    error: str | None = None,
+) -> None:
+    data: dict[str, Any] = {
+        "check_type": check_type,
+        "chain": chain,
+        "chain_label": chain_label,
+        "summary": {"skipped": skipped, "ok": ok, "fail": fail},
+        "has_failure": bool(fail > 0 or error),
+        "failed_contracts": [
+            {"component": component, "contract_name": contract_name, "address": address}
+            for component, contract_name, address in failed_contracts
+        ],
+        "pending_owner_contracts": [
+            {
+                "component": component,
+                "contract_name": contract_name,
+                "address": address,
+                "pending_owner": pending_owner,
+            }
+            for component, contract_name, address, pending_owner in pending_owner_contracts
+        ],
+        "error": error,
+    }
+    Path(path).write_text(json.dumps(data, indent=2), encoding="utf-8")
 
 
 def load_common_addresses(repo_root: Path, chain: str) -> dict[str, str]:
@@ -181,97 +233,73 @@ def collect_deployment_addresses(
     return out
 
 
-def eth_call_owner(rpc_url: str, contract_address: str) -> str | None:
-    """
-    Call owner() on contract via eth_call. Returns owner address (lowercase) or None if call reverts/fails.
-    """
-    payload = {
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": "eth_call",
-        "params": [
-            {
-                "to": contract_address if contract_address.startswith("0x") else "0x" + contract_address,
-                "data": OWNER_SELECTOR,
-            },
-            "latest",
-        ],
-    }
-    try:
-        from urllib.request import Request, urlopen
-        from urllib.error import HTTPError, URLError
-
-        req = Request(
-            rpc_url,
-            data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        with urlopen(req, timeout=30) as resp:
-            body = json.loads(resp.read().decode("utf-8"))
-    except (HTTPError, URLError, OSError, json.JSONDecodeError, KeyError) as e:
-        print(f"RPC error for {contract_address}: {e}", file=sys.stderr)
+def _extract_address_from_32byte_hex(value: str | None) -> str | None:
+    """Extract address from 32-byte hex word (last 20 bytes)."""
+    if not value or not isinstance(value, str):
         return None
-
-    err = body.get("error")
-    if err:
-        # Revert or RPC error -> no owner / not callable
+    data = value.strip().lower()
+    if not data.startswith("0x"):
         return None
-
-    result = (body.get("result") or "").strip()
-    if not result or result == "0x":
+    hex_part = data[2:]
+    if len(hex_part) != 64:
         return None
-    # address is 32 bytes (64 hex chars); last 20 bytes = address
-    if len(result) >= 64:
-        addr = "0x" + result[-40:].lower()
-        if addr == "0x" + "0" * 40:
-            return None
-        return addr
-    return None
-
-
-def eth_call_pending_owner(rpc_url: str, contract_address: str) -> str | None:
-    """
-    Call pendingOwner() on contract via eth_call (Ownable2Step).
-    Returns pending owner address (lowercase) or None if call reverts/fails or no pending owner.
-    """
-    payload = {
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": "eth_call",
-        "params": [
-            {
-                "to": contract_address if contract_address.startswith("0x") else "0x" + contract_address,
-                "data": PENDING_OWNER_SELECTOR,
-            },
-            "latest",
-        ],
-    }
-    try:
-        from urllib.request import Request, urlopen
-        from urllib.error import HTTPError, URLError
-
-        req = Request(
-            rpc_url,
-            data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        with urlopen(req, timeout=30) as resp:
-            body = json.loads(resp.read().decode("utf-8"))
-    except (HTTPError, URLError, OSError, json.JSONDecodeError, KeyError):
-        return None
-
-    if body.get("error"):
-        return None
-
-    result = (body.get("result") or "").strip()
-    if not result or result == "0x" or len(result) < 64:
-        return None
-    addr = "0x" + result[-40:].lower()
+    addr = "0x" + hex_part[-40:]
     if addr == "0x" + "0" * 40:
         return None
     return addr
+
+
+def detect_proxy_info(rpc_url: str, contract_address: str) -> tuple[bool, str]:
+    """
+    Probe proxy-related storage slots (EIP-1967).
+    Returns (is_proxy, details_string).
+    """
+    addr = contract_address if contract_address.startswith("0x") else "0x" + contract_address
+    calls = [
+        (1, "eth_getStorageAt", [addr, EIP1967_IMPLEMENTATION_SLOT, "latest"]),
+        (2, "eth_getStorageAt", [addr, EIP1967_ADMIN_SLOT, "latest"]),
+        (3, "eth_getStorageAt", [addr, EIP1967_BEACON_SLOT, "latest"]),
+    ]
+    by_id, err = rpc_batch_request(rpc_url, calls, timeout=45)
+    if err:
+        return False, f"proxy_probe_failed ({err})"
+    impl_body = by_id.get(1)
+    if not impl_body:
+        return False, "proxy_probe_failed (missing_implementation_response)"
+    if impl_body.get("error"):
+        return False, f"proxy_probe_failed (rpc_error {format_rpc_error(impl_body.get('error'))})"
+
+    impl = _extract_address_from_32byte_hex(impl_body.get("result"))
+
+    admin = None
+    admin_body = by_id.get(2)
+    if admin_body and not admin_body.get("error"):
+        admin = _extract_address_from_32byte_hex(admin_body.get("result"))
+
+    beacon = None
+    beacon_body = by_id.get(3)
+    if beacon_body and not beacon_body.get("error"):
+        beacon = _extract_address_from_32byte_hex(beacon_body.get("result"))
+
+    if impl or beacon:
+        return True, f"is_proxy implementation={impl or 'none'} admin={admin or 'none'} beacon={beacon or 'none'}"
+
+    return False, "not_proxy_eip1967_slots_empty"
+
+
+def _decode_owner_like_result(result: str | None, empty_reason: str) -> tuple[str | None, str | None]:
+    """Decode address-returning owner-like call result."""
+    result = (result or "").strip()
+    if not result or result == "0x":
+        return None, empty_reason
+    if not result.startswith("0x"):
+        return None, f"invalid_result_format {result[:60]}"
+    if len(result) < 64:
+        return None, f"short_result len={len(result)} value={result}"
+    addr = "0x" + result[-40:].lower()
+    if addr == "0x" + "0" * 40:
+        return None, "owner_is_zero_address"
+    return addr, None
 
 
 def main() -> int:
@@ -281,6 +309,19 @@ def main() -> int:
     for c in components:
         if c not in COMPONENT_PATHS:
             print(f"Unknown component: {c}. Allowed: {list(COMPONENT_PATHS.keys())}", file=sys.stderr)
+            if args.output_json_file:
+                _write_json_report(
+                    args.output_json_file,
+                    check_type="owner",
+                    chain=chain,
+                    chain_label=CHAIN_DISPLAY_NAMES.get(chain, chain),
+                    skipped=0,
+                    ok=0,
+                    fail=1,
+                    failed_contracts=[],
+                    pending_owner_contracts=[],
+                    error=f"Unknown component: {c}",
+                )
             return 2
 
     repo_root = Path(__file__).resolve().parents[1]
@@ -288,6 +329,19 @@ def main() -> int:
     dao_addresses = get_dao_addresses(common_addresses)
     if not dao_addresses:
         print(f"DAO/DAO_OLD not found in common/addresses/{chain}.json", file=sys.stderr)
+        if args.output_json_file:
+            _write_json_report(
+                args.output_json_file,
+                check_type="owner",
+                chain=chain,
+                chain_label=CHAIN_DISPLAY_NAMES.get(chain, chain),
+                skipped=0,
+                ok=0,
+                fail=1,
+                failed_contracts=[],
+                pending_owner_contracts=[],
+                error=f"DAO/DAO_OLD not found in common/addresses/{chain}.json",
+            )
         return 2
 
     # Build reverse map: address -> key for reporting
@@ -298,11 +352,54 @@ def main() -> int:
     if not args.dry_run and not rpc_url:
         hint = rpc_env or f"RPC_<chain> (add {chain!r} to CHAIN_TO_RPC_ENV)"
         print(f"RPC URL not set. Use --rpc-url or set env {hint}", file=sys.stderr)
+        if args.output_json_file:
+            _write_json_report(
+                args.output_json_file,
+                check_type="owner",
+                chain=chain,
+                chain_label=CHAIN_DISPLAY_NAMES.get(chain, chain),
+                skipped=0,
+                ok=0,
+                fail=1,
+                failed_contracts=[],
+                pending_owner_contracts=[],
+                error=f"RPC URL not set. Use --rpc-url or set env {hint}",
+            )
         return 2
+    if not args.dry_run:
+        preflight_err = rpc_preflight(rpc_url, timeout=20)
+        if preflight_err:
+            print(f"RPC preflight failed: {preflight_err}", file=sys.stderr)
+            if args.output_json_file:
+                _write_json_report(
+                    args.output_json_file,
+                    check_type="owner",
+                    chain=chain,
+                    chain_label=CHAIN_DISPLAY_NAMES.get(chain, chain),
+                    skipped=0,
+                    ok=0,
+                    fail=1,
+                    failed_contracts=[],
+                    pending_owner_contracts=[],
+                    error=f"RPC preflight failed: {preflight_err}",
+                )
+            return 2
 
     deployments = collect_deployment_addresses(repo_root, chain, components)
     if not deployments:
         print(f"No deployments found for chain={chain}, components={components}", file=sys.stderr)
+        if args.output_json_file:
+            _write_json_report(
+                args.output_json_file,
+                check_type="owner",
+                chain=chain,
+                chain_label=CHAIN_DISPLAY_NAMES.get(chain, chain),
+                skipped=0,
+                ok=0,
+                fail=0,
+                failed_contracts=[],
+                pending_owner_contracts=[],
+            )
         return 0
 
     deployments.sort(key=lambda x: (x[0], x[1]))  # alphabetical: component, then contract name
@@ -311,8 +408,62 @@ def main() -> int:
     skip_count = 0
     ok_count = 0
     fail_count = 0
-    failed_contracts: list[tuple[str, str]] = []
+    failed_contracts: list[tuple[str, str, str]] = []
     pending_owner_contracts: list[tuple[str, str, str, str]] = []  # (component, contract_name, address, pending_owner)
+
+    owner_results_by_address: dict[str, tuple[str | None, str | None]] = {}
+    pending_owner_by_address: dict[str, str] = {}
+    if not args.dry_run:
+        owner_targets: list[tuple[str, str, str]] = []
+        owner_calls: list[tuple[str, str]] = []
+        for component, contract_name, address, abi in deployments:
+            if contract_name in CONTRACTS_EXCLUDED:
+                continue
+            if not abi_has_owner(abi):
+                continue
+            owner_targets.append((component, contract_name, address))
+            owner_calls.append((address, OWNER_SELECTOR))
+
+        if owner_calls:
+            owner_results, owner_batch_err = multicall_eth_calls(chain, rpc_url, owner_calls, timeout=180)
+            if owner_batch_err:
+                for _component, _contract_name, address in owner_targets:
+                    owner_results_by_address[address] = (None, owner_batch_err)
+            else:
+                for (_component, _contract_name, address), (raw_result, call_err) in zip(owner_targets, owner_results):
+                    if call_err:
+                        owner_results_by_address[address] = (None, call_err)
+                    else:
+                        owner_results_by_address[address] = _decode_owner_like_result(
+                            raw_result,
+                            "empty_result (possible revert, no code, or non-standard owner())",
+                        )
+
+        pending_lookup_candidates: list[tuple[str, str, str]] = []
+        for component, contract_name, address, abi in deployments:
+            if contract_name in CONTRACTS_EXCLUDED or not abi_has_owner(abi):
+                continue
+            owner, owner_err = owner_results_by_address.get(address, (None, "missing_owner_result"))
+            if owner is None or owner in dao_addresses:
+                continue
+            pending_lookup_candidates.append((component, contract_name, address))
+
+        if pending_lookup_candidates:
+            pending_calls = [(address, PENDING_OWNER_SELECTOR) for _component, _contract_name, address in pending_lookup_candidates]
+            pending_results, pending_batch_err = multicall_eth_calls(chain, rpc_url, pending_calls, timeout=180)
+            if pending_batch_err:
+                pending_results = [(None, pending_batch_err)] * len(pending_lookup_candidates)
+            for (_component, _contract_name, address), (raw_result, call_err) in zip(
+                pending_lookup_candidates, pending_results
+            ):
+                if call_err:
+                    continue
+                pending_owner, _pending_err = _decode_owner_like_result(
+                    raw_result,
+                    "empty_result (possible revert, no code, or non-standard pendingOwner())",
+                )
+                if pending_owner:
+                    pending_owner_by_address[address] = pending_owner
 
     for component, contract_name, address, abi in deployments:
         if args.dry_run:
@@ -329,10 +480,30 @@ def main() -> int:
             skip_count += 1
             continue
 
-        owner = eth_call_owner(rpc_url, address)
+        owner, owner_err = owner_results_by_address.get(address, (None, "missing_owner_result"))
         if owner is None:
-            print(f"[skip] {component} {contract_name} owner() call failed")
-            skip_count += 1
+            is_silo_hook = contract_name.startswith("SiloHook")
+            if owner_err == "owner_is_zero_address" and is_silo_hook:
+                is_proxy, proxy_details = detect_proxy_info(rpc_url, address)
+                if not is_proxy:
+                    print(
+                        f"[ ok ] {component} {contract_name} owner is zero (allowed for non-proxy SiloHook implementation)"
+                    )
+                    print(f"       -> proxy_check: {proxy_details}")
+                    ok_count += 1
+                    continue
+                print(
+                    f"[FAIL] {component} {contract_name} owner() call failed for {address} "
+                    f"(ABI has owner(); reason: owner_is_zero_address; proxy_check: proxy; {proxy_details})"
+                )
+            else:
+                print(
+                    f"[FAIL] {component} {contract_name} owner() call failed for {address} "
+                    f"(ABI has owner(); reason: {owner_err or 'unknown'})"
+                )
+            has_failure = True
+            fail_count += 1
+            failed_contracts.append((component, contract_name, address))
             continue
 
         if owner in dao_addresses:
@@ -348,7 +519,7 @@ def main() -> int:
             )
         else:
             print(f"[FAIL] {component} {contract_name} owner is {key} ({owner}), expected DAO or DAO_OLD")
-        pending = eth_call_pending_owner(rpc_url, address)
+        pending = pending_owner_by_address.get(address)
         if pending:
             pending_key = addr_to_key.get(pending)
             if pending_key is not None:
@@ -358,10 +529,22 @@ def main() -> int:
             pending_owner_contracts.append((component, contract_name, address, pending))
         has_failure = True
         fail_count += 1
-        failed_contracts.append((component, contract_name))
+        failed_contracts.append((component, contract_name, address))
 
     if args.dry_run:
         print(f"Dry-run: would check {len(deployments)} deployments for chain={chain}.")
+        if args.output_json_file:
+            _write_json_report(
+                args.output_json_file,
+                check_type="owner",
+                chain=chain,
+                chain_label=CHAIN_DISPLAY_NAMES.get(chain, chain),
+                skipped=skip_count,
+                ok=ok_count,
+                fail=fail_count,
+                failed_contracts=failed_contracts,
+                pending_owner_contracts=pending_owner_contracts,
+            )
         return 0
 
     print()
@@ -373,8 +556,8 @@ def main() -> int:
     if failed_contracts:
         print()
         print(f"Contracts failing verification on {chain_label}:")
-        for component, contract_name in failed_contracts:
-            print(f"  - {component}/{contract_name}")
+        for component, contract_name, contract_address in failed_contracts:
+            print(f"  - {component}/{contract_name} {contract_address}")
 
     if pending_owner_contracts:
         print()
@@ -385,7 +568,20 @@ def main() -> int:
         print(f"Acceptance ownership method signature: acceptOwnership() {ACCEPT_OWNERSHIP_SELECTOR}")
         print()
 
-    return 1 if has_failure else 0
+    if args.output_json_file:
+        _write_json_report(
+            args.output_json_file,
+            check_type="owner",
+            chain=chain,
+            chain_label=chain_label,
+            skipped=skip_count,
+            ok=ok_count,
+            fail=fail_count,
+            failed_contracts=failed_contracts,
+            pending_owner_contracts=pending_owner_contracts,
+        )
+
+    return 1 if has_failure and not args.no_fail else 0
 
 
 if __name__ == "__main__":

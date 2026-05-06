@@ -10,7 +10,6 @@ env:
     RPC_ANVIL: ${{ secrets.RPC_ANVIL }}
     RPC_SONIC: ${{ secrets.RPC_SONIC }}
     RPC_AVALANCHE: ${{ secrets.RPC_AVALANCHE }}
-    RPC_INK: ${{ secrets.RPC_INK }}
     RPC_INJECTIVE: ${{ secrets.RPC_INJECTIVE }}
     RPC_XDC: ${{ secrets.RPC_XDC }}
     RPC_MANTLE: ${{ secrets.RPC_MANTLE }}

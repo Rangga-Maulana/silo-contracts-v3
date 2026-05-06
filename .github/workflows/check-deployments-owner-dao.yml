@@ -40,7 +40,6 @@ env:
   RPC_OPTIMISM: ${{ secrets.RPC_OPTIMISM }}
   RPC_SONIC: ${{ secrets.RPC_SONIC }}
   RPC_AVALANCHE: ${{ secrets.RPC_AVALANCHE }}
-  RPC_INK: ${{ secrets.RPC_INK }}
   RPC_BASE: ${{ secrets.RPC_BASE }}
   RPC_BNB: ${{ secrets.RPC_BNB }}
   RPC_OKX: ${{ secrets.RPC_OKX }}
@@ -61,7 +60,6 @@ jobs:
           - base
           - bnb
           - injective
-          - ink
           - mainnet
           - mantle
           - megaeth
@@ -105,7 +103,6 @@ jobs:
           - base
           - bnb
           - injective
-          - ink
           - mainnet
           - mantle
           - megaeth
@@ -149,7 +146,6 @@ jobs:
           - base
           - bnb
           - injective
-          # - ink
           - mainnet
           - mantle
           - megaeth

@@ -26,6 +26,7 @@ import os
 import sys
 from pathlib import Path
 from typing import Any
+from rpc_multicall import format_rpc_error, multicall_eth_calls, rpc_batch_request, rpc_preflight
 
 # OpenZeppelin AccessControl: DEFAULT_ADMIN_ROLE = bytes32(0)
 DEFAULT_ADMIN_ROLE_HEX = "0" * 64
@@ -197,73 +198,6 @@ def collect_deployment_addresses(
     return out
 
 
-def _format_rpc_error(err: Any) -> str:
-    """Format JSON-RPC error object into a concise, human-readable string."""
-    if isinstance(err, dict):
-        code = err.get("code")
-        msg = err.get("message")
-        data = err.get("data")
-        parts: list[str] = []
-        if code is not None:
-            parts.append(f"code={code}")
-        if msg:
-            parts.append(f"message={msg}")
-        if data is not None:
-            data_str = str(data)
-            if len(data_str) > 180:
-                data_str = data_str[:177] + "..."
-            parts.append(f"data={data_str}")
-        return ", ".join(parts) if parts else str(err)
-    return str(err)
-
-
-def _rpc_request(rpc_url: str, method: str, params: list[Any]) -> tuple[dict[str, Any] | None, str | None]:
-    """Perform a JSON-RPC request and return (body, error_reason)."""
-    payload = {
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": method,
-        "params": params,
-    }
-    try:
-        from urllib.request import Request, urlopen
-        from urllib.error import HTTPError, URLError
-
-        req = Request(
-            rpc_url,
-            data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        with urlopen(req, timeout=30) as resp:
-            body = json.loads(resp.read().decode("utf-8"))
-    except HTTPError as e:
-        status = getattr(e, "code", "unknown")
-        return None, f"http_error status={status} reason={e.reason}"
-    except URLError as e:
-        return None, f"url_error reason={e.reason}"
-    except TimeoutError as e:
-        return None, f"timeout_error {e}"
-    except (OSError, json.JSONDecodeError, KeyError) as e:
-        return None, f"transport_or_decode_error {e}"
-    return body, None
-
-
-def _eth_call(rpc_url: str, to: str, data: str) -> tuple[str | None, str | None]:
-    to = to if to.startswith("0x") else "0x" + to
-    body, req_err = _rpc_request(rpc_url, "eth_call", [{"to": to, "data": data}, "latest"])
-    if req_err:
-        return None, req_err
-    if body is None:
-        return None, "empty_response"
-    if body.get("error"):
-        return None, f"rpc_error {_format_rpc_error(body.get('error'))}"
-    result = (body.get("result") or "").strip()
-    if not result:
-        return None, "empty_result"
-    return result, None
-
-
 def _extract_address_from_32byte_hex(value: str | None) -> str | None:
     """Extract address from 32-byte hex word (last 20 bytes)."""
     if not value or not isinstance(value, str):
@@ -286,24 +220,30 @@ def detect_proxy_info(rpc_url: str, contract_address: str) -> tuple[bool, str]:
     Returns (is_proxy, details_string).
     """
     addr = contract_address if contract_address.startswith("0x") else "0x" + contract_address
-    impl_body, impl_req_err = _rpc_request(rpc_url, "eth_getStorageAt", [addr, EIP1967_IMPLEMENTATION_SLOT, "latest"])
-    if impl_req_err:
-        return False, f"proxy_probe_failed ({impl_req_err})"
-    if impl_body is None:
-        return False, "proxy_probe_failed (empty_response)"
+    calls = [
+        (1, "eth_getStorageAt", [addr, EIP1967_IMPLEMENTATION_SLOT, "latest"]),
+        (2, "eth_getStorageAt", [addr, EIP1967_ADMIN_SLOT, "latest"]),
+        (3, "eth_getStorageAt", [addr, EIP1967_BEACON_SLOT, "latest"]),
+    ]
+    by_id, err = rpc_batch_request(rpc_url, calls, timeout=45)
+    if err:
+        return False, f"proxy_probe_failed ({err})"
+    impl_body = by_id.get(1)
+    if not impl_body:
+        return False, "proxy_probe_failed (missing_implementation_response)"
     if impl_body.get("error"):
-        return False, f"proxy_probe_failed (rpc_error {_format_rpc_error(impl_body.get('error'))})"
+        return False, f"proxy_probe_failed (rpc_error {format_rpc_error(impl_body.get('error'))})"
 
     impl = _extract_address_from_32byte_hex(impl_body.get("result"))
 
     admin = None
-    admin_body, admin_req_err = _rpc_request(rpc_url, "eth_getStorageAt", [addr, EIP1967_ADMIN_SLOT, "latest"])
-    if not admin_req_err and admin_body and not admin_body.get("error"):
+    admin_body = by_id.get(2)
+    if admin_body and not admin_body.get("error"):
         admin = _extract_address_from_32byte_hex(admin_body.get("result"))
 
     beacon = None
-    beacon_body, beacon_req_err = _rpc_request(rpc_url, "eth_getStorageAt", [addr, EIP1967_BEACON_SLOT, "latest"])
-    if not beacon_req_err and beacon_body and not beacon_body.get("error"):
+    beacon_body = by_id.get(3)
+    if beacon_body and not beacon_body.get("error"):
         beacon = _extract_address_from_32byte_hex(beacon_body.get("result"))
 
     if impl or beacon:
@@ -312,33 +252,23 @@ def detect_proxy_info(rpc_url: str, contract_address: str) -> tuple[bool, str]:
     return False, "not_proxy_eip1967_slots_empty"
 
 
-def eth_call_admin(rpc_url: str, contract_address: str) -> tuple[str | None, str | None]:
-    """
-    Get first DEFAULT_ADMIN_ROLE holder via getRoleMemberCount + getRoleMember.
-    Returns (address, error_reason).
-    address is lowercase when available, otherwise None.
-    error_reason is present only when address is None.
-    """
-    # getRoleMemberCount(DEFAULT_ADMIN_ROLE): selector + bytes32(0)
-    data_count = GET_ROLE_MEMBER_COUNT_SELECTOR + DEFAULT_ADMIN_ROLE_HEX
-    result, call_err = _eth_call(rpc_url, contract_address, data_count)
-    if result is None:
-        return None, f"admin_count_call_failed ({call_err or 'unknown'})"
-    # uint256: 32 bytes = 64 hex chars
+def _decode_admin_count(result: str | None) -> tuple[int | None, str | None]:
+    result = (result or "").strip()
+    if not result:
+        return None, "empty_result"
     if len(result) < 64:
         return None, f"invalid_admin_count_result len={len(result)} value={result[:60]}"
     count_hex = result[-64:]
     try:
-        count = int(count_hex, 16)
+        return int(count_hex, 16), None
     except ValueError:
         return None, f"invalid_admin_count_hex {count_hex}"
-    if count == 0:
-        return None, "admin_role_empty_or_zero"
-    # getRoleMember(DEFAULT_ADMIN_ROLE, 0): selector + role (32 bytes) + index (32 bytes = 0)
-    data_member = GET_ROLE_MEMBER_SELECTOR + DEFAULT_ADMIN_ROLE_HEX + "0" * 64
-    result, call_err = _eth_call(rpc_url, contract_address, data_member)
-    if result is None:
-        return None, f"admin_member_call_failed ({call_err or 'unknown'})"
+
+
+def _decode_admin_member(result: str | None) -> tuple[str | None, str | None]:
+    result = (result or "").strip()
+    if not result:
+        return None, "empty_result"
     if len(result) < 64:
         return None, f"invalid_admin_member_result len={len(result)} value={result[:60]}"
     addr = "0x" + result[-40:].lower()
@@ -407,6 +337,23 @@ def main() -> int:
                 error=f"RPC URL not set. Use --rpc-url or set env {hint}",
             )
         return 2
+    if not args.dry_run:
+        preflight_err = rpc_preflight(rpc_url, timeout=20)
+        if preflight_err:
+            print(f"RPC preflight failed: {preflight_err}", file=sys.stderr)
+            if args.output_json_file:
+                _write_json_report(
+                    args.output_json_file,
+                    check_type="admin",
+                    chain=chain,
+                    chain_label=CHAIN_DISPLAY_NAMES.get(chain, chain),
+                    skipped=0,
+                    ok=0,
+                    fail=1,
+                    failed_contracts=[],
+                    error=f"RPC preflight failed: {preflight_err}",
+                )
+            return 2
 
     deployments = collect_deployment_addresses(repo_root, chain, components)
     if not deployments:
@@ -432,6 +379,56 @@ def main() -> int:
     fail_count = 0
     failed_contracts: list[tuple[str, str, str]] = []
 
+    admin_by_address: dict[str, tuple[str | None, str | None]] = {}
+    if not args.dry_run:
+        admin_targets: list[tuple[str, str, str]] = []
+        count_calls: list[tuple[str, str]] = []
+        for component, contract_name, address, abi in deployments:
+            if contract_name in CONTRACTS_EXCLUDED:
+                continue
+            if not abi_has_access_control_admin(abi):
+                continue
+            admin_targets.append((component, contract_name, address))
+            count_calls.append((address, GET_ROLE_MEMBER_COUNT_SELECTOR + DEFAULT_ADMIN_ROLE_HEX))
+
+        members_to_fetch: list[tuple[str, str, str]] = []
+        if count_calls:
+            count_results, count_batch_err = multicall_eth_calls(chain, rpc_url, count_calls, timeout=180)
+            if count_batch_err:
+                for _component, _contract_name, address in admin_targets:
+                    admin_by_address[address] = (None, count_batch_err)
+            else:
+                for (_component, _contract_name, address), (raw_result, call_err) in zip(admin_targets, count_results):
+                    if call_err:
+                        admin_by_address[address] = (None, f"admin_count_call_failed ({call_err})")
+                        continue
+                    count, decode_err = _decode_admin_count(raw_result)
+                    if decode_err:
+                        admin_by_address[address] = (None, decode_err)
+                        continue
+                    if not count:
+                        admin_by_address[address] = (None, "admin_role_empty_or_zero")
+                        continue
+                    members_to_fetch.append((_component, _contract_name, address))
+
+        if members_to_fetch:
+            member_calls = [
+                (address, GET_ROLE_MEMBER_SELECTOR + DEFAULT_ADMIN_ROLE_HEX + "0" * 64)
+                for _component, _contract_name, address in members_to_fetch
+            ]
+            member_results, member_batch_err = multicall_eth_calls(chain, rpc_url, member_calls, timeout=180)
+            if member_batch_err:
+                member_results = [(None, member_batch_err)] * len(members_to_fetch)
+            for (_component, _contract_name, address), (raw_result, call_err) in zip(members_to_fetch, member_results):
+                if call_err:
+                    admin_by_address[address] = (None, f"admin_member_call_failed ({call_err})")
+                    continue
+                admin, decode_err = _decode_admin_member(raw_result)
+                if decode_err:
+                    admin_by_address[address] = (None, decode_err)
+                else:
+                    admin_by_address[address] = (admin, None)
+
     for component, contract_name, address, abi in deployments:
         if args.dry_run:
             print(f"[dry-run] {component} {contract_name} {address}")
@@ -447,7 +444,7 @@ def main() -> int:
             skip_count += 1
             continue
 
-        admin, admin_err = eth_call_admin(rpc_url, address)
+        admin, admin_err = admin_by_address.get(address, (None, "missing_admin_result"))
         if admin is None:
             is_silo_hook = contract_name.startswith("SiloHook")
             if admin_err == "admin_role_empty_or_zero" and is_silo_hook:

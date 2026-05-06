@@ -22,6 +22,7 @@ import os
 import re
 import sys
 from pathlib import Path
+from rpc_multicall import format_rpc_error, multicall_eth_calls, rpc_preflight, rpc_request
 from typing import Any
 
 # getVersions(address[]) selector
@@ -243,30 +244,14 @@ def _eth_call(rpc_url: str, to: str, data: str) -> str | None:
 def _eth_call_with_error(rpc_url: str, to: str, data: str) -> tuple[str | None, str | None]:
     """Like _eth_call but returns (result, error_message). error_message is set when RPC returns error."""
     to = to if to.startswith("0x") else "0x" + to
-    payload = {
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": "eth_call",
-        "params": [{"to": to, "data": data}, "latest"],
-    }
-    try:
-        from urllib.request import Request, urlopen
-        from urllib.error import HTTPError, URLError
-
-        req = Request(
-            rpc_url,
-            data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        with urlopen(req, timeout=30) as resp:
-            body = json.loads(resp.read().decode("utf-8"))
-    except (HTTPError, URLError, OSError, json.JSONDecodeError, KeyError) as e:
-        return None, str(e)
+    body, req_err = rpc_request(rpc_url, "eth_call", [{"to": to, "data": data}, "latest"], timeout=45)
+    if req_err:
+        return None, req_err
+    if body is None:
+        return None, "empty_response"
     err = body.get("error")
     if err:
-        msg = err.get("message", err) if isinstance(err, dict) else str(err)
-        return None, msg
+        return None, f"rpc_error {format_rpc_error(err)}"
     return (body.get("result") or "").strip() or None, None
 
 
@@ -476,6 +461,23 @@ def main() -> int:
                 error=f"RPC URL not set. Use --rpc-url or set env {hint}",
             )
         return 2
+    if not args.dry_run:
+        preflight_err = rpc_preflight(rpc_url, timeout=20)
+        if preflight_err:
+            print(f"RPC preflight failed: {preflight_err}", file=sys.stderr)
+            if args.output_json_file:
+                _write_json_report(
+                    args.output_json_file,
+                    check_type="version",
+                    chain=chain,
+                    chain_label=CHAIN_DISPLAY_NAMES.get(chain, chain),
+                    skipped=0,
+                    ok=0,
+                    fail=1,
+                    failed_contracts=[],
+                    error=f"RPC preflight failed: {preflight_err}",
+                )
+            return 2
 
     all_deployments: list[tuple[str, str, str]] = []
     deployments_by_key: dict[tuple[str, str], str] = {}
@@ -607,25 +609,52 @@ def main() -> int:
     silo_deployer_addr_by_display: dict[str, str | None] = {}
     if not args.dry_run:
         addresses = [addr for _, addr in key_addr_pairs]
+        prefetch_labels: list[tuple[str, str]] = []
+        prefetch_calls: list[tuple[str, str]] = []
         if dkm_expected:
-            irm_addr = call_factory_irm(rpc_url, deployments_by_key[("core", "DynamicKinkModelFactory")])
-            if irm_addr:
-                addresses.append(irm_addr)
+            prefetch_labels.append(("dkm", "DynamicKinkModelFactory"))
+            prefetch_calls.append((deployments_by_key[("core", "DynamicKinkModelFactory")], IRM_SELECTOR))
         for display_name, factory_name, _impl_name, _expected in oracle_custom_checks:
             factory_addr = deployments_by_key.get(("oracle", factory_name))
             if not factory_addr:
                 continue
-            impl_addr = call_zero_arg_address_getter(rpc_url, factory_addr, ORACLE_IMPLEMENTATION_SELECTOR)
-            oracle_impl_addr_by_display[display_name] = impl_addr
-            if impl_addr:
-                addresses.append(impl_addr)
+            prefetch_labels.append(("oracle", display_name))
+            prefetch_calls.append((factory_addr, ORACLE_IMPLEMENTATION_SELECTOR))
         deployer_addr = deployments_by_key.get(("core", "SiloDeployer"))
         if deployer_addr:
             for display_name, _expected, selector in silo_deployer_checks:
-                addr = call_zero_arg_address_getter(rpc_url, deployer_addr, selector)
-                silo_deployer_addr_by_display[display_name] = addr
-                if addr:
-                    addresses.append(addr)
+                prefetch_labels.append(("silo_deployer", display_name))
+                prefetch_calls.append((deployer_addr, selector))
+
+        if prefetch_calls:
+            prefetch_results, prefetch_err = multicall_eth_calls(chain, rpc_url, prefetch_calls, timeout=180)
+            if prefetch_err and args.verbose:
+                print(f"[verbose] prefetch multicall failed: {prefetch_err}", file=sys.stderr)
+            for (kind, label), (raw_result, call_err) in zip(prefetch_labels, prefetch_results):
+                if call_err or not raw_result or len(raw_result) < 64:
+                    if kind == "oracle":
+                        oracle_impl_addr_by_display[label] = None
+                    elif kind == "silo_deployer":
+                        silo_deployer_addr_by_display[label] = None
+                    continue
+                decoded_addr = "0x" + raw_result[-40:].lower()
+                if decoded_addr == "0x" + "0" * 40:
+                    decoded_addr = None
+                if kind == "dkm":
+                    irm_addr = decoded_addr
+                elif kind == "oracle":
+                    oracle_impl_addr_by_display[label] = decoded_addr
+                elif kind == "silo_deployer":
+                    silo_deployer_addr_by_display[label] = decoded_addr
+
+        if irm_addr:
+            addresses.append(irm_addr)
+        for _display_name, impl_addr in oracle_impl_addr_by_display.items():
+            if impl_addr:
+                addresses.append(impl_addr)
+        for _display_name, addr in silo_deployer_addr_by_display.items():
+            if addr:
+                addresses.append(addr)
         if addresses:
             on_chain_list = get_versions_on_chain(rpc_url, silo_lens, addresses, verbose=args.verbose)
             n_versioned = len(key_addr_pairs)

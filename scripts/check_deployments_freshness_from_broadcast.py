@@ -25,8 +25,7 @@ import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
+from rpc_multicall import rpc_batch_request, rpc_preflight
 
 COMPONENT_DEPLOY_ROOTS = {
     "core": "silo-core/deployments",
@@ -249,29 +248,10 @@ def find_deploy_tx_for_address(
     return None
 
 
-def rpc_post(rpc_url: str, method: str, params: list) -> dict | None:
-    payload = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
-    try:
-        req = Request(
-            rpc_url,
-            data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        with urlopen(req, timeout=45) as resp:
-            body = json.loads(resp.read().decode("utf-8"))
-    except (HTTPError, URLError, OSError, json.JSONDecodeError, KeyError):
+def decode_block_timestamp_from_response(resp: dict | None) -> int | None:
+    if not resp or resp.get("error"):
         return None
-    if body.get("error"):
-        return None
-    return body
-
-
-def get_block_timestamp(rpc_url: str, block_number_hex: str) -> int | None:
-    res = rpc_post(rpc_url, "eth_getBlockByNumber", [block_number_hex, False])
-    if not res:
-        return None
-    r = res.get("result")
+    r = resp.get("result")
     if not isinstance(r, dict):
         return None
     ts = r.get("timestamp")
@@ -301,6 +281,11 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
+    if not args.dry_run:
+        preflight_err = rpc_preflight(rpc_url, timeout=20)
+        if preflight_err:
+            print(f"RPC preflight failed: {preflight_err}", file=sys.stderr)
+            return 1
 
     repo_root = Path(__file__).resolve().parent.parent
     if args.deployment_file:
@@ -321,6 +306,8 @@ def main() -> int:
     fail_block_timestamp = 0
     fail_too_old = 0
 
+    hit_rows: list[tuple[str, str, str, str, str, Path]] = []
+    unique_blocks: set[str] = set()
     for comp, name, addr in entries:
         checked_count += 1
         hit = find_deploy_tx_for_address(repo_root, chain_id, addr)
@@ -336,12 +323,42 @@ def main() -> int:
 
         tx_hash, block_hex, run_path = hit
         found_in_broadcast_count += 1
-        rel_run = run_path.relative_to(repo_root)
         if args.dry_run:
+            rel_run = run_path.relative_to(repo_root)
             print(f"[dry-run] {comp}/{name} {addr} tx={tx_hash} block={block_hex} via {rel_run}")
             continue
+        hit_rows.append((comp, name, addr, tx_hash, block_hex, run_path))
+        unique_blocks.add(block_hex)
 
-        ts = get_block_timestamp(rpc_url, block_hex)
+    if args.dry_run:
+        total_fail = fail_missing_broadcast
+        print()
+        print("=== Freshness Summary ===")
+        print(f"chain: {chain}")
+        print(f"checked contracts: {checked_count}")
+        print(f"found in run-latest: {found_in_broadcast_count}")
+        print(f"ok: {ok_count}")
+        print(f"fail_missing_broadcast: {fail_missing_broadcast}")
+        print(f"fail_block_timestamp: {fail_block_timestamp}")
+        print(f"fail_too_old: {fail_too_old}")
+        print(f"total_fail: {total_fail}")
+        return 0
+
+    block_calls = [
+        (idx + 1, "eth_getBlockByNumber", [block_hex, False])
+        for idx, block_hex in enumerate(sorted(unique_blocks))
+    ]
+    block_by_id, batch_err = rpc_batch_request(rpc_url, block_calls, timeout=90)
+    if batch_err:
+        print(f"[FAIL] block timestamp batch request failed: {batch_err}", file=sys.stderr)
+        return 1
+    block_to_timestamp: dict[str, int | None] = {}
+    for idx, block_hex in enumerate(sorted(unique_blocks)):
+        block_to_timestamp[block_hex] = decode_block_timestamp_from_response(block_by_id.get(idx + 1))
+
+    for comp, name, addr, tx_hash, block_hex, run_path in hit_rows:
+        rel_run = run_path.relative_to(repo_root)
+        ts = block_to_timestamp.get(block_hex)
         if ts is None:
             print(
                 f"[FAIL] {comp}/{name} {addr} could not read block timestamp "

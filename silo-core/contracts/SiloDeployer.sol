@@ -4,7 +4,7 @@ pragma solidity 0.8.28;
 import {Clones} from "openzeppelin5/proxy/Clones.sol";
 
 import {Create2Factory} from "common/utils/Create2Factory.sol";
-import {Ownable1and2Steps} from "common/access/Ownable1and2Steps.sol";
+import {Ownable1and2Steps, Ownable} from "common/access/Ownable1and2Steps.sol";
 
 import {ISiloConfig} from "silo-core/contracts/interfaces/ISiloConfig.sol";
 import {ISiloFactory} from "silo-core/contracts/interfaces/ISiloFactory.sol";
@@ -21,12 +21,16 @@ import {IGaugeHookReceiver} from "silo-core/contracts/interfaces/IGaugeHookRecei
 import {IShareToken} from "silo-core/contracts/interfaces/IShareToken.sol";
 import {IPartialLiquidationByDefaulting} from "silo-core/contracts/interfaces/IPartialLiquidationByDefaulting.sol";
 import {ISiloIncentivesController} from "silo-core/contracts/incentives/interfaces/ISiloIncentivesController.sol";
+import {
+    IPermissionedLiquidationControllerFactory
+} from "silo-core/contracts/interfaces/IPermissionedLiquidationControllerFactory.sol";
 
 import {SiloConfig} from "silo-core/contracts/SiloConfig.sol";
 import {CloneDeterministic} from "silo-core/contracts/lib/CloneDeterministic.sol";
 import {Views} from "silo-core/contracts/lib/Views.sol";
 import {Whitelist} from "silo-core/contracts/hooks/_common/Whitelist.sol";
 import {IVersioned} from "silo-core/contracts/interfaces/IVersioned.sol";
+import {TransparentProxy} from "silo-core/contracts/utils/TransparentProxy.sol";
 
 /// @notice Silo Deployer
 contract SiloDeployer is Create2Factory, ISiloDeployer, IVersioned {
@@ -35,6 +39,7 @@ contract SiloDeployer is Create2Factory, ISiloDeployer, IVersioned {
     IDynamicKinkModelFactory public immutable DYNAMIC_KINK_MODEL_FACTORY;
     ISiloFactory public immutable SILO_FACTORY;
     ISiloIncentivesControllerFactory public immutable SILO_INCENTIVES_CONTROLLER_FACTORY;
+    IPermissionedLiquidationControllerFactory public immutable PERMISSIONED_LIQUIDATION_CONTROLLER_FACTORY;
     address public immutable SILO_IMPL;
     address public immutable SHARE_PROTECTED_COLLATERAL_TOKEN_IMPL;
     address public immutable SHARE_DEBT_TOKEN_IMPL;
@@ -43,14 +48,12 @@ contract SiloDeployer is Create2Factory, ISiloDeployer, IVersioned {
     /// @notice variable to store the final hook owner
     address internal transient _finalHookOwner;
 
-    /// @notice TRUE is hook has defaulting liquidation
-    bool internal transient _gaugeRequired;
-
     constructor(
         IInterestRateModelV2Factory _irmConfigFactory,
         IDynamicKinkModelFactory _dynamicKinkModelFactory,
         ISiloFactory _siloFactory,
         ISiloIncentivesControllerFactory _siloIncentivesControllerFactory,
+        IPermissionedLiquidationControllerFactory _permissionedLiquidationControllerFactory,
         address _siloImpl,
         address _shareProtectedCollateralTokenImpl,
         address _shareDebtTokenImpl
@@ -59,6 +62,7 @@ contract SiloDeployer is Create2Factory, ISiloDeployer, IVersioned {
         DYNAMIC_KINK_MODEL_FACTORY = _dynamicKinkModelFactory;
         SILO_FACTORY = _siloFactory;
         SILO_INCENTIVES_CONTROLLER_FACTORY = _siloIncentivesControllerFactory;
+        PERMISSIONED_LIQUIDATION_CONTROLLER_FACTORY = _permissionedLiquidationControllerFactory;
         SILO_IMPL = _siloImpl;
         SHARE_PROTECTED_COLLATERAL_TOKEN_IMPL = _shareProtectedCollateralTokenImpl;
         SHARE_DEBT_TOKEN_IMPL = _shareDebtTokenImpl;
@@ -90,45 +94,104 @@ contract SiloDeployer is Create2Factory, ISiloDeployer, IVersioned {
             _creator: msg.sender
         });
 
-        _gaugeRequired = _isDefaultingHook(_siloInitData.hookReceiver);
-
         // initialize hook receiver only if it was cloned
         _initializeHookReceiver(_siloInitData, siloConfig, _clonableHookReceiver);
 
-        _createIncentivesController(siloConfig, _siloInitData);
+        _createIncentivesControllerForDefaulting({
+            _siloConfig: siloConfig,
+            _hookReceiver: _siloInitData.hookReceiver,
+            _lt0: _siloInitData.lt0
+        });
+
+        // we always create permissioned, because we want pausing
+        _createPermissionedIncentivesControllers({
+            _siloConfig: siloConfig,
+            _hookReceiver: _siloInitData.hookReceiver,
+            _lt0: _siloInitData.lt0,
+            _lt1: _siloInitData.lt1
+        });
+
+        Ownable1and2Steps(_siloInitData.hookReceiver).transferOwnership1Step(_finalHookOwner);
 
         emit SiloCreated(siloConfig);
     }
 
     /// @inheritdoc IVersioned
     function VERSION() external pure returns (string memory version) {
-        return "SiloDeployer 4.4.2";
+        return "SiloDeployer 4.12.0";
     }
 
     /// @notice Create an incentives controller if the hook is defaulting
-    function _createIncentivesController(ISiloConfig _siloConfig, ISiloConfig.InitData memory _siloInitData)
+    function _createIncentivesControllerForDefaulting(ISiloConfig _siloConfig, address _hookReceiver, uint256 _lt0)
         internal
     {
-        if (!_gaugeRequired) return;
+        if (!_isDefaultingHook(_hookReceiver)) return;
 
-        address debtSilo = _getDebtSilo(_siloConfig, _siloInitData);
+        address debtSilo = _getDebtSilo(_siloConfig, _lt0);
 
         address incentivesController = SILO_INCENTIVES_CONTROLLER_FACTORY.create({
             _owner: _finalHookOwner,
-            _notifier: _siloInitData.hookReceiver,
+            _notifier: _hookReceiver,
             _shareToken: debtSilo,
             _externalSalt: bytes32(0)
         });
 
-        IGaugeHookReceiver(_siloInitData.hookReceiver).setGauge({
+        IGaugeHookReceiver(_hookReceiver).setGauge({
             _gauge: ISiloIncentivesController(incentivesController), 
             _shareToken: IShareToken(debtSilo)
         });
 
-        Ownable1and2Steps(_siloInitData.hookReceiver).transferOwnership1Step(_finalHookOwner);
-        bytes32 defaultAdminRole = Whitelist(address(_siloInitData.hookReceiver)).DEFAULT_ADMIN_ROLE();
-        Whitelist(address(_siloInitData.hookReceiver)).grantRole(defaultAdminRole, _finalHookOwner);
-        Whitelist(address(_siloInitData.hookReceiver)).revokeRole(defaultAdminRole, address(this));
+        // we have Whitelist interface for HookV2/V3
+        _transferDefaultAdminRole(_hookReceiver);
+    }
+    
+    function _createPermissionedIncentivesControllers(
+        ISiloConfig _siloConfig, 
+        address _hookReceiver, 
+        uint256 _lt0, 
+        uint256 _lt1
+    )
+        internal
+    {
+        (address silo0, address silo1) = _siloConfig.getSilos();
+
+        if (_lt0 != 0) {
+            (address protectedShareToken, address collateralShareToken,) = _siloConfig.getShareTokens(silo0);
+
+            _createPermissionedIncentivesController(_hookReceiver, collateralShareToken);
+            _createPermissionedIncentivesController(_hookReceiver, protectedShareToken);
+        }
+        
+        if (_lt1 != 0) {
+            (address protectedShareToken, address collateralShareToken,) = _siloConfig.getShareTokens(silo1);
+
+            _createPermissionedIncentivesController(_hookReceiver, collateralShareToken);
+            _createPermissionedIncentivesController(_hookReceiver, protectedShareToken);
+        }
+    }
+    
+    function _createPermissionedIncentivesController(address _hookReceiver, address _shareToken)
+        internal
+    {
+        address incentivesController = PERMISSIONED_LIQUIDATION_CONTROLLER_FACTORY.create(IShareToken(_shareToken));
+
+        IGaugeHookReceiver(_hookReceiver).setGauge({
+            _gauge: ISiloIncentivesController(incentivesController), 
+            _shareToken: IShareToken(_shareToken)
+        });
+
+        // The controller is a proxy and owner is inherited from a hook, and hook has temporary owner set at the moment
+        // so we have to transfer ownership.
+        Ownable(TransparentProxy(payable(incentivesController)).getAdmin()).transferOwnership(_finalHookOwner);
+
+        // for permissioned controller we have whitelist for liquidators
+        _transferDefaultAdminRole(incentivesController);
+    }
+    
+    function _transferDefaultAdminRole(address _whitelist) internal {
+        bytes32 defaultAdminRole = bytes32(0);
+        Whitelist(_whitelist).grantRole(defaultAdminRole, _finalHookOwner);
+        Whitelist(_whitelist).revokeRole(defaultAdminRole, address(this));
     }
 
     function _isDefaultingHook(address _hook) internal view returns (bool isDefaulting) {
@@ -144,13 +207,14 @@ contract SiloDeployer is Create2Factory, ISiloDeployer, IVersioned {
         }
     }
 
-    function _getDebtSilo(ISiloConfig _siloConfig, ISiloConfig.InitData memory _siloInitData)
+    // For two-way markets, it's simply get the silos
+    function _getDebtSilo(ISiloConfig _siloConfig, uint256 _lt0)
         internal
         view
         returns (address debtSilo)
     {
         (address silo0, address silo1) = _siloConfig.getSilos();
-        debtSilo = _siloInitData.lt0 == 0 ? silo0 : silo1;
+        debtSilo = _lt0 == 0 ? silo0 : silo1;
     }
 
     /// @notice Deploy `SiloConfig` with predicted addresses
@@ -362,17 +426,16 @@ contract SiloDeployer is Create2Factory, ISiloDeployer, IVersioned {
         ClonableHookReceiver calldata _clonableHookReceiver
     ) internal {
         if (_clonableHookReceiver.implementation != address(0)) {
-            if (_gaugeRequired) {
-                require(_clonableHookReceiver.initializationData.length == 32, InvalidHookInitData());
-                
-                (_finalHookOwner) = abi.decode(_clonableHookReceiver.initializationData, (address));
-            }
+            // init data must be address
+            require(_clonableHookReceiver.initializationData.length == 32, InvalidHookInitData());
+            
+            (_finalHookOwner) = abi.decode(_clonableHookReceiver.initializationData, (address));
 
             IHookReceiver(_siloInitData.hookReceiver)
                 .initialize({
                     _siloConfig: _siloConfig,
                     // override owner so we can set the incentives controller
-                    _data: _gaugeRequired ? abi.encode(address(this)) : _clonableHookReceiver.initializationData
+                    _data: abi.encode(address(this))
                 });
         }
     }

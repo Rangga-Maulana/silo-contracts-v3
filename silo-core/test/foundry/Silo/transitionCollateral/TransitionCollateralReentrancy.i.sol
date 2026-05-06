@@ -8,10 +8,14 @@ import {SafeERC20} from "openzeppelin5/token/ERC20/utils/SafeERC20.sol";
 import {SiloConfigsNames} from "silo-core/deploy/silo/SiloDeployments.sol";
 
 import {Hook} from "silo-core/contracts/lib/Hook.sol";
+import {IHookReceiver} from "silo-core/contracts/interfaces/IHookReceiver.sol";
 import {ISiloConfig} from "silo-core/contracts/interfaces/ISiloConfig.sol";
 import {ICrossReentrancyGuard} from "silo-core/contracts/interfaces/ICrossReentrancyGuard.sol";
 import {ISilo} from "silo-core/contracts/interfaces/ISilo.sol";
+import {IPartialLiquidation} from "silo-core/contracts/interfaces/IPartialLiquidation.sol";
+import {BaseHookReceiver} from "silo-core/contracts/hooks/_common/BaseHookReceiver.sol";
 import {PartialLiquidation} from "silo-core/contracts/hooks/liquidation/PartialLiquidation.sol";
+import {HookReceiverBootstrapMock} from "silo-core/test/foundry/_mocks/HookReceiverBootstrapMock.sol";
 
 import {SiloConfigOverride} from "../../_common/fixtures/SiloFixture.sol";
 import {SiloFixture} from "../../_common/fixtures/SiloFixture.sol";
@@ -21,11 +25,12 @@ import {MintableToken} from "../../_common/MintableToken.sol";
 /*
 FOUNDRY_PROFILE=core_test forge test -vvv --ffi --mc TransitionCollateralReentrancyTest
 */
-contract TransitionCollateralReentrancyTest is SiloLittleHelper, Test, PartialLiquidation {
+contract TransitionCollateralReentrancyTest is SiloLittleHelper, Test, PartialLiquidation, HookReceiverBootstrapMock {
     using Hook for uint256;
     using SafeERC20 for IERC20;
 
-    bool afterActionExecuted;
+    bool public afterActionExecuted;
+    TransitionCollateralReentrancyTest internal _hook;
 
     function setUp() public {
         SiloFixture siloFixture = new SiloFixture();
@@ -35,21 +40,35 @@ contract TransitionCollateralReentrancyTest is SiloLittleHelper, Test, PartialLi
         token1 = new MintableToken(7);
         configOverride.token0 = address(token0);
         configOverride.token1 = address(token1);
-        configOverride.hookReceiver = address(this);
-        configOverride.configName = SiloConfigsNames.SILO_LOCAL_DEPLOYER;
+        configOverride.hookReceiverImplementation = address(this);
+        configOverride.configName = SiloConfigsNames.SILO_LOCAL_NO_ORACLE_SILO;
 
-        (siloConfig, silo0, silo1,,,) = siloFixture.deploy_local(configOverride);
-        partialLiquidation = this;
+        address hook;
+        (siloConfig, silo0, silo1,,, hook) = siloFixture.deploy_local(configOverride);
+        _hook = TransitionCollateralReentrancyTest(payable(hook));
+        partialLiquidation = PartialLiquidation(hook);
 
         silo0.updateHooks();
     }
 
-    function initialize(ISiloConfig, bytes calldata) public override {}
+    function initialize(ISiloConfig _siloConfig, bytes calldata)
+        public
+        override(HookReceiverBootstrapMock, IHookReceiver)
+    {
+        if (owner() == address(0)) _transferOwnership(msg.sender);
+        siloConfig = _siloConfig;
+        (address _silo0, address _silo1) = _siloConfig.getSilos();
+        silo0 = ISilo(_silo0);
+        silo1 = ISilo(_silo1);
+        token0 = MintableToken(_siloConfig.getConfig(_silo0).token);
+        token1 = MintableToken(_siloConfig.getConfig(_silo1).token);
+        partialLiquidation = PartialLiquidation(address(this));
+    }
 
     function hookReceiverConfig(address _silo)
         external
         view
-        override
+        override(HookReceiverBootstrapMock, BaseHookReceiver)
         returns (uint24 hooksBefore, uint24 hooksAfter)
     {
         hooksBefore = 0;
@@ -72,18 +91,20 @@ contract TransitionCollateralReentrancyTest is SiloLittleHelper, Test, PartialLi
 
         if (silo0.isSolvent(borrower)) return; // we want insolvent case
 
+        IPartialLiquidation hook = IPartialLiquidation(address(this));
+
         token1.mint(address(this), 5);
-        IERC20(token1).safeIncreaseAllowance(address(partialLiquidation), 5);
+        IERC20(token1).safeIncreaseAllowance(address(hook), 5);
 
         afterActionExecuted = true;
 
-        (uint256 collateralToLiquidate, uint256 debtToRepay,) = partialLiquidation.maxLiquidation(borrower);
+        (uint256 collateralToLiquidate, uint256 debtToRepay,) = hook.maxLiquidation(borrower);
 
         assertEq(collateralToLiquidate, 3, "collateralToLiquidate (5 - 2 underestimation)");
         assertEq(debtToRepay, 5, "debtToRepay");
 
         vm.expectRevert(ICrossReentrancyGuard.CrossReentrantCall.selector);
-        partialLiquidation.liquidationCall(address(token0), address(token1), borrower, debtToRepay, false);
+        hook.liquidationCall(address(token0), address(token1), borrower, debtToRepay, false);
     }
 
     /*
@@ -98,7 +119,7 @@ contract TransitionCollateralReentrancyTest is SiloLittleHelper, Test, PartialLi
         vm.prank(borrower);
         silo0.transitionCollateral(depositedShares / 2, borrower, ISilo.CollateralType.Collateral);
 
-        assertTrue(afterActionExecuted, "afterActionExecuted");
+        assertTrue(_hook.afterActionExecuted(), "afterActionExecuted");
         assertTrue(silo0.isSolvent(borrower), "borrower is solvent after transition of collateral");
 
         (, ISiloConfig.ConfigData memory debt) = siloConfig.getConfigsForSolvency(borrower);

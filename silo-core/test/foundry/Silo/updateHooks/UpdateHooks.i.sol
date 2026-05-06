@@ -13,6 +13,8 @@ import {SiloLittleHelper} from "../../_common/SiloLittleHelper.sol";
     forge test --ffi -vv --mc UpdateHooksTest
 */
 contract UpdateHooksTest is SiloLittleHelper, Test {
+    using Hook for uint256;
+
     ISiloConfig siloConfig;
 
     uint24 private _hooksBefore = 123;
@@ -32,31 +34,39 @@ contract UpdateHooksTest is SiloLittleHelper, Test {
     }
 
     /*
-    forge test --ffi -vv --mt test_updateHooks_anyoneCanCall
+    FOUNDRY_PROFILE=core_test forge test --ffi -vv --mt test_updateHooks_anyoneCanCall
     */
     function test_updateHooks_anyoneCanCall() public {
         vm.expectEmit(true, true, true, true);
-        emit HooksUpdated(0, 0);
+        emit HooksUpdated(
+            0, uint24(Hook.PROTECTED_TOKEN.addAction(Hook.COLLATERAL_TOKEN).addAction(Hook.SHARE_TOKEN_TRANSFER))
+        );
 
         silo1.updateHooks();
     }
 
     /*
-    forge test --ffi -vv --mt test_updateHooks_emitEvent
+    FOUNDRY_PROFILE=core_test forge test --ffi -vv --mt test_updateHooks_whenNothingChanged
     */
     function test_updateHooks_whenNothingChanged() public {
         // we expect not have reverts when no update was done
         silo0.updateHooks();
 
+        uint256 hookAfter = uint24(Hook.PROTECTED_TOKEN.addAction(Hook.COLLATERAL_TOKEN).addAction(Hook.SHARE_TOKEN_TRANSFER));
+
         vm.expectEmit(true, true, true, true);
-        emit HooksUpdated(0, 0);
+        // casting to 'uint24' is safe because hook is always uint24
+        // forge-lint: disable-next-line(unsafe-typecast)
+        emit HooksUpdated(0, uint24(hookAfter));
 
         silo0.updateHooks();
 
         silo1.updateHooks();
 
         vm.expectEmit(true, true, true, true);
-        emit HooksUpdated(0, 0);
+        // casting to 'uint24' is safe because hook is always uint24
+        // forge-lint: disable-next-line(unsafe-typecast)
+        emit HooksUpdated(0, uint24(hookAfter));
 
         silo1.updateHooks();
     }

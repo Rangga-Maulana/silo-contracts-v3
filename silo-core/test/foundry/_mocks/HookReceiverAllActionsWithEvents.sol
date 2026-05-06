@@ -7,11 +7,13 @@ import {ISiloConfig} from "silo-core/contracts/interfaces/ISiloConfig.sol";
 import {IHookReceiver} from "silo-core/contracts/interfaces/IHookReceiver.sol";
 import {ISilo} from "silo-core/contracts/interfaces/ISilo.sol";
 import {SafeCast} from "openzeppelin5/utils/math/SafeCast.sol";
+import {Ownable1and2Steps} from "common/access/Ownable1and2Steps.sol";
 
 /// @dev Hook receiver for all actions with events to see decoded inputs
 /// This contract is designed to be deployed for each test case
-contract HookReceiverAllActionsWithEvents is PartialLiquidation {
+contract HookReceiverAllActionsWithEvents is PartialLiquidation, Ownable1and2Steps {
     using Hook for uint256;
+    using Hook for uint24;
     using SafeCast for uint256;
 
     bool internal constant _IS_BEFORE = true;
@@ -141,7 +143,7 @@ contract HookReceiverAllActionsWithEvents is PartialLiquidation {
         uint256 _silo0ActionsAfter,
         uint256 _silo1ActionsBefore,
         uint256 _silo1ActionsAfter
-    ) {
+    ) Ownable1and2Steps(address(0xdead)) {
         _SILO0_ACTIONS_BEFORE = _silo0ActionsBefore.toUint24();
         _SILO0_ACTIONS_AFTER = _silo0ActionsAfter.toUint24();
         _SILO1_ACTIONS_BEFORE = _silo1ActionsBefore.toUint24();
@@ -149,7 +151,7 @@ contract HookReceiverAllActionsWithEvents is PartialLiquidation {
     }
 
     /// @inheritdoc IHookReceiver
-    function initialize(ISiloConfig _config, bytes calldata) public override {
+    function initialize(ISiloConfig _config, bytes calldata _ownerData) public override initializer {
         siloConfig = _config;
 
         (address silo0, address silo1) = siloConfig.getSilos();
@@ -157,6 +159,12 @@ contract HookReceiverAllActionsWithEvents is PartialLiquidation {
         // Set hooks for all actions for both silos
         _setHookConfig(silo0, _SILO0_ACTIONS_BEFORE, _SILO0_ACTIONS_AFTER);
         _setHookConfig(silo1, _SILO1_ACTIONS_BEFORE, _SILO1_ACTIONS_AFTER);
+
+        _transferOwnership(abi.decode(_ownerData, (address)));
+    }
+
+    function setGauge(address, address) external pure {
+        // do nothing
     }
 
     function revertAnyAction() external {

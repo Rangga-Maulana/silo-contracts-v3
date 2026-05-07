@@ -22,10 +22,11 @@ import {
 } from "silo-core/contracts/interfaces/IPermissionedLiquidationControllerFactory.sol";
 
 /*
-    SILO_CONFIG=0xF8D32Da4Ad9378C3754CE846BE02654e52b2C09d \
+    SILO_CONFIG=0xc88734b3D929bb9EAc81F9eada48D6D330a3F37F \
+    DEBT=false \
     FOUNDRY_PROFILE=core \
         forge script silo-core/deploy/incentives-controller/PermissionedLiquidationControllerDeploy.s.sol \
-        --ffi --rpc-url $RPC_MAINNET --broadcast --verify
+        --ffi --rpc-url $RPC_ARBITRUM --broadcast --verify
  */
 contract PermissionedLiquidationControllerDeploy is CommonDeploy, StdCheats {
     error FactoryNotFound();
@@ -33,6 +34,12 @@ contract PermissionedLiquidationControllerDeploy is CommonDeploy, StdCheats {
     IPermissionedLiquidationControllerFactory factory;
 
     function run() public {
+        // if we care only about liquidation, not pausing, then we don't have to deploy for debt share token
+        if (!vm.envBool("DEBT")) {
+            console2.log("\n\tSkipping debt share token deployment\n");
+            console2.log("\tif this deployment is for pausing, then please use DEBT=true.\n");
+        }
+
         ISiloConfig siloConfig = ISiloConfig(vm.envAddress("SILO_CONFIG"));
         (address silo0, address silo1) = siloConfig.getSilos();
 
@@ -51,6 +58,7 @@ contract PermissionedLiquidationControllerDeploy is CommonDeploy, StdCheats {
 
         console2.log("SILO ID:", siloConfig.SILO_ID());
 
+        console2.log("Deploying for silo 0");
         (address incentivesControllerC0, address incentivesControllerP0, address incentivesControllerD0) =
             _deployForSilo(siloConfig, silo0, notifier);
 
@@ -62,6 +70,7 @@ contract PermissionedLiquidationControllerDeploy is CommonDeploy, StdCheats {
             _incentivesControllerD: incentivesControllerD0
         });
 
+        console2.log("Deploying for silo 1");
         (address incentivesControllerC1, address incentivesControllerP1, address incentivesControllerD1) =
             _deployForSilo(siloConfig, silo1, notifier);
 
@@ -97,13 +106,20 @@ contract PermissionedLiquidationControllerDeploy is CommonDeploy, StdCheats {
         returns (address incentivesControllerC, address incentivesControllerP, address incentivesControllerD)
     {
         ISiloConfig.ConfigData memory config = _siloConfig.getConfig(_silo);
+        
+        if (config.lt == 0) {
+            console2.log("LT is 0, not collateral silo, skipping deployment");
+            return (address(0), address(0), address(0));
+        }
+
         address collateralShareTokenAddress = config.collateralShareToken;
         address protectedShareTokenAddress = config.protectedShareToken;
         address debtShareTokenAddress = config.debtShareToken;
 
         ISiloIncentivesController debtGauge =
             IGaugeHookReceiver(_hook).configuredGauges(IShareToken(debtShareTokenAddress));
-        bool deployForDebt = address(debtGauge) == address(0);
+        
+        bool deployForDebt = vm.envBool("DEBT") &&address(debtGauge) == address(0);
 
         vm.startBroadcast(uint256(vm.envBytes32("PRIVATE_KEY")));
 
@@ -140,25 +156,34 @@ contract PermissionedLiquidationControllerDeploy is CommonDeploy, StdCheats {
         address _incentivesControllerP,
         address _incentivesControllerD
     ) internal {
+        if (_incentivesControllerC == address(0) && _incentivesControllerP == address(0) && _incentivesControllerD == address(0)) {
+            console2.log("No incentives controllers deployed, skipping QA");
+            return;
+        }
+
         console2.log("--- QA ---");
 
         bool deployForDebt = _incentivesControllerD != address(0);
 
         vm.startPrank(Ownable(_hook).owner());
 
-        IGaugeHookReceiver(_hook)
-            .setGauge({
-                _gauge: ISiloIncentivesController(_incentivesControllerC),
-                _shareToken: IShareToken(ISiloIncentivesController(_incentivesControllerC).SHARE_TOKEN())
-            });
+        if (_incentivesControllerC != address(0)) {
+            IGaugeHookReceiver(_hook)
+                .setGauge({
+                    _gauge: ISiloIncentivesController(_incentivesControllerC),
+                    _shareToken: IShareToken(ISiloIncentivesController(_incentivesControllerC).SHARE_TOKEN())
+                });
+        }
 
-        IGaugeHookReceiver(_hook)
-            .setGauge({
-                _gauge: ISiloIncentivesController(_incentivesControllerP),
-                _shareToken: IShareToken(ISiloIncentivesController(_incentivesControllerP).SHARE_TOKEN())
-            });
+        if (_incentivesControllerP != address(0)) {
+            IGaugeHookReceiver(_hook)
+                .setGauge({
+                    _gauge: ISiloIncentivesController(_incentivesControllerP),
+                    _shareToken: IShareToken(ISiloIncentivesController(_incentivesControllerP).SHARE_TOKEN())
+                });
+        }
 
-        if (deployForDebt) {
+        if (deployForDebt && _incentivesControllerD != address(0)) {
             IGaugeHookReceiver(_hook)
                 .setGauge({
                     _gauge: ISiloIncentivesController(_incentivesControllerD),

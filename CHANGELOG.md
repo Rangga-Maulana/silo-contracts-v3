@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## Unreleased
 
+## [4.13.1] - 2026-05-07
+### Added
+- `PermissionedLiquidationController` deployment
+
 ## [4.13.0] - 2026-05-07
 ### Updated
 - allow `PermissionedLiquidationController` set for debt share token (#1896)

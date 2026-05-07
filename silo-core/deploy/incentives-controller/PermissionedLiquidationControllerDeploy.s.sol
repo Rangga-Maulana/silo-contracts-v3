@@ -22,11 +22,20 @@ import {
 } from "silo-core/contracts/interfaces/IPermissionedLiquidationControllerFactory.sol";
 
 /*
-    SILO_CONFIG=0xc88734b3D929bb9EAc81F9eada48D6D330a3F37F \
+    SILO_CONFIG=0xaE01a8BdA7799A7aE4D56CC255db56a7e7FaF7F8 \
     DEBT=false \
     FOUNDRY_PROFILE=core \
         forge script silo-core/deploy/incentives-controller/PermissionedLiquidationControllerDeploy.s.sol \
-        --ffi --rpc-url $RPC_ARBITRUM --broadcast --verify
+        --ffi --rpc-url $RPC_MAINNET --broadcast --verify
+
+    resume verification:
+    FOUNDRY_PROFILE=core \
+        forge script silo-core/deploy/incentives-controller/PermissionedLiquidationControllerDeploy.s.sol \
+        --ffi --rpc-url $RPC_MAINNET \
+        --verify \
+        --verifier-url $VERIFIER_URL_MAINNET \
+        --private-key $PRIVATE_KEY \
+        --resume
  */
 contract PermissionedLiquidationControllerDeploy is CommonDeploy, StdCheats {
     error FactoryNotFound();
@@ -56,7 +65,7 @@ contract PermissionedLiquidationControllerDeploy is CommonDeploy, StdCheats {
             string.concat(SiloCoreContracts.PERMISSIONED_LIQUIDATION_CONTROLLER_FACTORY, " not found")
         );
 
-        console2.log("SILO ID:", siloConfig.SILO_ID());
+        console2.log("SILO ID:", siloConfig.SILO_ID(), ", config: ", vm.toString(address(siloConfig)));
 
         console2.log("Deploying for silo 0");
         (address incentivesControllerC0, address incentivesControllerP0, address incentivesControllerD0) =

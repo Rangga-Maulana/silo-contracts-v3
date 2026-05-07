@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## Unreleased
 
+## [4.14.0] - 2026-05-08
+### Added
+- flat price oracle deployment on MegaETH
+
 ## [4.13.1] - 2026-05-07
 ### Added
 - `PermissionedLiquidationController` deployment

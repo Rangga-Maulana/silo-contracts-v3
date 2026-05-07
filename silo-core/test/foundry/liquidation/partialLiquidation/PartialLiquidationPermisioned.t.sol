@@ -106,6 +106,8 @@ contract PartialLiquidationPermissionedTest is SiloLittleHelper, IntegrationTest
         weth.setOnDemand(true);
         usdc.setOnDemand(true);
 
+        // _setupPermissionedControllers();
+
         _fetchControllers();
         _enablePermissionsIfDisabled();
     }
@@ -177,6 +179,28 @@ contract PartialLiquidationPermissionedTest is SiloLittleHelper, IntegrationTest
             address(controller),
             "controller should be configured for share token"
         );
+    }
+
+    /*
+    FOUNDRY_PROFILE=core_test forge test -vv --ffi --mt test_permisioned_liquidation_remove
+    */
+    function test_permisioned_liquidation_remove() public {
+        address collateralShareToken = silo0.config().getConfig(address(silo0)).collateralShareToken;
+        address protectedShareToken = silo0.config().getConfig(address(silo0)).protectedShareToken;
+        address debtShareToken = silo1.config().getConfig(address(silo1)).debtShareToken;
+
+        vm.startPrank(IPermissionedLiquidationController(address(controllerC)).owner());
+        IPermissionedLiquidationController debtController = IPermissionedLiquidationController(factory.create(IShareToken(debtShareToken)));
+        IGaugeHookReceiver(address(partialLiquidation)).setGauge(debtController, IShareToken(debtShareToken));
+        vm.stopPrank();
+
+        _createPositionToLiquidate(ISilo.CollateralType.Protected);
+
+        vm.startPrank(IPermissionedLiquidationController(address(controllerC)).owner());
+        IGaugeHookReceiver(address(partialLiquidation)).removeGauge(IShareToken(debtShareToken));
+        IGaugeHookReceiver(address(partialLiquidation)).removeGauge(IShareToken(protectedShareToken));
+        IGaugeHookReceiver(address(partialLiquidation)).removeGauge(IShareToken(collateralShareToken));
+        vm.stopPrank();
     }
 
     /*
@@ -390,5 +414,19 @@ contract PartialLiquidationPermissionedTest is SiloLittleHelper, IntegrationTest
         vm.prank(Ownable(address(proxyAdmin)).owner());
         ProxyAdmin(proxyAdmin)
             .upgradeAndCall(ITransparentUpgradeableProxy(payable(_controllerProxy)), _newImplementation, bytes(""));
+    }
+
+    function _setupPermissionedControllers() internal {
+        IGaugeHookReceiver hook = IGaugeHookReceiver(IShareToken(address(silo0)).hookReceiver());
+        address collateralShareToken = silo0.config().getConfig(address(silo0)).collateralShareToken;
+        address protectedShareToken = silo0.config().getConfig(address(silo0)).protectedShareToken;
+
+        controllerC = IPermissionedLiquidationController(factory.create(IShareToken(collateralShareToken)));
+        controllerP = IPermissionedLiquidationController(factory.create(IShareToken(protectedShareToken)));
+
+        vm.startPrank(Ownable(address(hook)).owner());
+        hook.setGauge(controllerC, IShareToken(collateralShareToken));
+        hook.setGauge(controllerP, IShareToken(protectedShareToken));
+        vm.stopPrank();
     }
 }

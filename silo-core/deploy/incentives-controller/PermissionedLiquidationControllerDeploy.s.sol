@@ -22,7 +22,7 @@ import {
 } from "silo-core/contracts/interfaces/IPermissionedLiquidationControllerFactory.sol";
 
 /*
-    SILO=0xe394050D179b72197A458Fdfb962Ae69908Aa5A0 \
+    SILO_CONFIG=0xF8D32Da4Ad9378C3754CE846BE02654e52b2C09d \
     FOUNDRY_PROFILE=core \
         forge script silo-core/deploy/incentives-controller/PermissionedLiquidationControllerDeploy.s.sol \
         --ffi --rpc-url $RPC_MAINNET --broadcast --verify
@@ -30,104 +30,162 @@ import {
 contract PermissionedLiquidationControllerDeploy is CommonDeploy, StdCheats {
     error FactoryNotFound();
 
+    IPermissionedLiquidationControllerFactory factory;
+
     function run() public {
-        uint256 deployerPrivateKey = uint256(vm.envBytes32("PRIVATE_KEY"));
+        ISiloConfig siloConfig = ISiloConfig(vm.envAddress("SILO_CONFIG"));
+        (address silo0, address silo1) = siloConfig.getSilos();
 
-        ISilo silo = ISilo(vm.envAddress("SILO"));
+        address notifier = IShareToken(silo0).hookReceiver();
 
-        address notifier = IShareToken(address(silo)).hookReceiver();
-        address owner = Ownable(notifier).owner();
-
-        address factory = SiloCoreDeployments.get(
-            SiloCoreContracts.PERMISSIONED_LIQUIDATION_CONTROLLER_FACTORY, ChainsLib.chainAlias()
+        factory = IPermissionedLiquidationControllerFactory(
+            SiloCoreDeployments.get(
+                SiloCoreContracts.PERMISSIONED_LIQUIDATION_CONTROLLER_FACTORY, ChainsLib.chainAlias()
+            )
         );
 
-        require(factory != address(0), string.concat(SiloCoreContracts.PERMISSIONED_LIQUIDATION_CONTROLLER_FACTORY, " not found"));
+        require(
+            address(factory) != address(0),
+            string.concat(SiloCoreContracts.PERMISSIONED_LIQUIDATION_CONTROLLER_FACTORY, " not found")
+        );
 
-        ISiloConfig cfg = silo.config();
+        console2.log("SILO ID:", siloConfig.SILO_ID());
 
-        console2.log("SILO ID:", cfg.SILO_ID());
+        (address incentivesControllerC0, address incentivesControllerP0, address incentivesControllerD0) =
+            _deployForSilo(siloConfig, silo0, notifier);
 
-        ISiloConfig.ConfigData memory config = cfg.getConfig(address(silo));
+        _qa({
+            _siloConfig: siloConfig,
+            _hook: notifier,
+            _incentivesControllerC: incentivesControllerC0,
+            _incentivesControllerP: incentivesControllerP0,
+            _incentivesControllerD: incentivesControllerD0
+        });
+
+        (address incentivesControllerC1, address incentivesControllerP1, address incentivesControllerD1) =
+            _deployForSilo(siloConfig, silo1, notifier);
+
+        _qa({
+            _siloConfig: siloConfig,
+            _hook: notifier,
+            _incentivesControllerC: incentivesControllerC1,
+            _incentivesControllerP: incentivesControllerP1,
+            _incentivesControllerD: incentivesControllerD1
+        });
+
+        _save(incentivesControllerC0);
+        _save(incentivesControllerP0);
+        _save(incentivesControllerD0);
+
+        _save(incentivesControllerC1);
+        _save(incentivesControllerP1);
+        _save(incentivesControllerD1);
+    }
+
+    function _save(address _incentivesController) internal {
+        if (_incentivesController == address(0)) return;
+
+        SiloIncentivesControllerDeployments.save({
+            _chain: ChainsLib.chainAlias(),
+            _shareToken: ISiloIncentivesController(_incentivesController).SHARE_TOKEN(),
+            _deployed: _incentivesController
+        });
+    }
+
+    function _deployForSilo(ISiloConfig _siloConfig, address _silo, address _hook)
+        private
+        returns (address incentivesControllerC, address incentivesControllerP, address incentivesControllerD)
+    {
+        ISiloConfig.ConfigData memory config = _siloConfig.getConfig(_silo);
         address collateralShareTokenAddress = config.collateralShareToken;
         address protectedShareTokenAddress = config.protectedShareToken;
         address debtShareTokenAddress = config.debtShareToken;
 
-        ISiloIncentivesController debtGauge = IGaugeHookReceiver(notifier).configuredGauges(IShareToken(debtShareTokenAddress));
+        ISiloIncentivesController debtGauge =
+            IGaugeHookReceiver(_hook).configuredGauges(IShareToken(debtShareTokenAddress));
         bool deployForDebt = address(debtGauge) == address(0);
 
-        vm.startBroadcast(deployerPrivateKey);
+        vm.startBroadcast(uint256(vm.envBytes32("PRIVATE_KEY")));
 
-        address incentivesControllerC =
-            IPermissionedLiquidationControllerFactory(factory).create(IShareToken(collateralShareTokenAddress));
-        
-        address incentivesControllerP =
-            IPermissionedLiquidationControllerFactory(factory).create(IShareToken(protectedShareTokenAddress));
+        incentivesControllerC = factory.create(IShareToken(collateralShareTokenAddress));
 
-        address incentivesControllerD;
+        incentivesControllerP = factory.create(IShareToken(protectedShareTokenAddress));
+
         if (deployForDebt) {
-            incentivesControllerD =
-                IPermissionedLiquidationControllerFactory(factory).create(IShareToken(debtShareTokenAddress));
+            incentivesControllerD = factory.create(IShareToken(debtShareTokenAddress));
         }
 
         vm.stopBroadcast();
 
         // hook receiver ownership acceptance data
         console2.log(
-            "\nHook(%s).setGauge(ic: %s, shareToken: %s)",
-            notifier,
-            incentivesControllerC,
-            collateralShareTokenAddress
+            "\nHook(%s).setGauge(\n\tgauge: %s,\n\tcollateralShareToken: %s\n)", _hook, incentivesControllerC, collateralShareTokenAddress
         );
-        
+
         console2.log(
-            "\nHook(%s).setGauge(ic: %s, shareToken: %s)", notifier, incentivesControllerP, protectedShareTokenAddress
+            "\nHook(%s).setGauge(\n\tgauge: %s,\n\tprotectedShareToken: %s\n)", _hook, incentivesControllerP, protectedShareTokenAddress
         );
 
         if (deployForDebt) {
             console2.log(
-                "\nHook(%s).setGauge(ic: %s, shareToken: %s)", notifier, incentivesControllerD, debtShareTokenAddress
+                "\nHook(%s).setGauge(\n\tgauge: %s,\n\tdebtShareToken: %s\n)", _hook, incentivesControllerD, debtShareTokenAddress
             );
         }
+    }
 
-        console2.log("QA ---");
+    function _qa(
+        ISiloConfig _siloConfig,
+        address _hook,
+        address _incentivesControllerC,
+        address _incentivesControllerP,
+        address _incentivesControllerD
+    ) internal {
+        console2.log("--- QA ---");
 
-        vm.startPrank(owner);
-        IGaugeHookReceiver(notifier)
-            .setGauge(
-                ISiloIncentivesController(address(incentivesControllerC)), IShareToken(collateralShareTokenAddress)
-            );
+        bool deployForDebt = _incentivesControllerD != address(0);
 
-        IGaugeHookReceiver(notifier)
-            .setGauge(
-                ISiloIncentivesController(address(incentivesControllerP)), IShareToken(protectedShareTokenAddress)
-            );
+        vm.startPrank(Ownable(_hook).owner());
+
+        IGaugeHookReceiver(_hook)
+            .setGauge({
+                _gauge: ISiloIncentivesController(_incentivesControllerC),
+                _shareToken: IShareToken(ISiloIncentivesController(_incentivesControllerC).SHARE_TOKEN())
+            });
+
+        IGaugeHookReceiver(_hook)
+            .setGauge({
+                _gauge: ISiloIncentivesController(_incentivesControllerP),
+                _shareToken: IShareToken(ISiloIncentivesController(_incentivesControllerP).SHARE_TOKEN())
+            });
 
         if (deployForDebt) {
-            IGaugeHookReceiver(notifier).setGauge(
-                ISiloIncentivesController(address(incentivesControllerD)), IShareToken(debtShareTokenAddress)
-            );
-        }
-
-        IGaugeHookReceiver(notifier).removeGauge(IShareToken(collateralShareTokenAddress));
-        IGaugeHookReceiver(notifier).removeGauge(IShareToken(protectedShareTokenAddress));
-
-        if (deployForDebt) {
-            IGaugeHookReceiver(notifier).removeGauge(IShareToken(debtShareTokenAddress));
+            IGaugeHookReceiver(_hook)
+                .setGauge({
+                    _gauge: ISiloIncentivesController(_incentivesControllerD),
+                    _shareToken: IShareToken(ISiloIncentivesController(_incentivesControllerD).SHARE_TOKEN())
+                });
         }
 
         vm.stopPrank();
 
-        // Cheat-only smoke test (fake user + `deal`); does not use PRIVATE_KEY and is not broadcast.
-        _qaSiloSmoke(cfg);
+        _qaSiloSmoke(_siloConfig);
 
-        SiloIncentivesControllerDeployments.save({
-            _chain: ChainsLib.chainAlias(), _shareToken: collateralShareTokenAddress, _deployed: incentivesControllerC
-        });
+        vm.startPrank(Ownable(_hook).owner());
 
-        SiloIncentivesControllerDeployments.save({
-            _chain: ChainsLib.chainAlias(), _shareToken: protectedShareTokenAddress, _deployed: incentivesControllerP
-        });
+        IShareToken shareToken = IShareToken(ISiloIncentivesController(_incentivesControllerC).SHARE_TOKEN());
+        IGaugeHookReceiver(_hook).removeGauge(shareToken);
+
+        shareToken = IShareToken(ISiloIncentivesController(_incentivesControllerP).SHARE_TOKEN());
+        IGaugeHookReceiver(_hook).removeGauge(shareToken);
+
+        if (deployForDebt) {
+            shareToken = IShareToken(ISiloIncentivesController(_incentivesControllerD).SHARE_TOKEN());
+            IGaugeHookReceiver(_hook).removeGauge(shareToken);
+        }
+
+        vm.stopPrank();
+
+        console2.log("--- QA PASS ---");
     }
 
     function _qaSiloSmoke(ISiloConfig siloConfig) private {
@@ -148,7 +206,10 @@ contract PermissionedLiquidationControllerDeploy is CommonDeploy, StdCheats {
         require(_qaBorrow(silo0, depositor) || _qaBorrow(silo1, depositor), "QA: borrow failed");
     }
 
-    function _qaDealForSilos(ISilo silo0, ISilo silo1, address depositor) private returns (uint256 unit0, uint256 unit1) {
+    function _qaDealForSilos(ISilo silo0, ISilo silo1, address depositor)
+        private
+        returns (uint256 unit0, uint256 unit1)
+    {
         address asset0 = silo0.asset();
         address asset1 = silo1.asset();
         unit0 = 10 ** uint256(IERC20Metadata(asset0).decimals());
@@ -157,11 +218,7 @@ contract PermissionedLiquidationControllerDeploy is CommonDeploy, StdCheats {
         deal(asset1, depositor, unit1 * 2_000);
     }
 
-    function _qaDepositOnSilo(
-        ISilo _silo,
-        address _depositor,
-        uint256 _amount
-    ) private {
+    function _qaDepositOnSilo(ISilo _silo, address _depositor, uint256 _amount) private {
         address asset = _silo.asset();
         IERC20(asset).approve(address(_silo), type(uint256).max);
         _silo.deposit(_amount, _depositor, ISilo.CollateralType.Protected);
@@ -174,7 +231,7 @@ contract PermissionedLiquidationControllerDeploy is CommonDeploy, StdCheats {
         if (maxBorrow0 == 0) return false;
 
         uint256 shares = _silo.borrow(maxBorrow0, _depositor, _depositor);
-        
+
         vm.warp(block.timestamp + 1 days);
 
         _silo.repayShares(shares, _depositor);

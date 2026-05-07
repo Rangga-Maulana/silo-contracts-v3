@@ -22,7 +22,7 @@ import {
 } from "silo-core/contracts/interfaces/IPermissionedLiquidationControllerFactory.sol";
 
 /*
-    SILO_CONFIG=0xaE01a8BdA7799A7aE4D56CC255db56a7e7FaF7F8 \
+    SILO_CONFIG=0xfAa8b214A896Dfd41FA0aaE07D55E6b15b59357a \
     DEBT=false \
     FOUNDRY_PROFILE=core \
         forge script silo-core/deploy/incentives-controller/PermissionedLiquidationControllerDeploy.s.sol \
@@ -173,22 +173,39 @@ contract PermissionedLiquidationControllerDeploy is CommonDeploy, StdCheats {
         console2.log("--- QA ---");
 
         bool deployForDebt = _incentivesControllerD != address(0);
+        IShareToken shareToken;
 
         vm.startPrank(Ownable(_hook).owner());
 
         if (_incentivesControllerC != address(0)) {
+            shareToken = IShareToken(ISiloIncentivesController(_incentivesControllerC).SHARE_TOKEN());
+            ISiloIncentivesController gauge = IGaugeHookReceiver(_hook).configuredGauges(shareToken);
+            
+            if (address(gauge) != address(0)) {
+                console2.log("existing gauge: ", address(gauge));
+                revert("Gauge already configured for collateral share token");
+            }
+
             IGaugeHookReceiver(_hook)
                 .setGauge({
                     _gauge: ISiloIncentivesController(_incentivesControllerC),
-                    _shareToken: IShareToken(ISiloIncentivesController(_incentivesControllerC).SHARE_TOKEN())
+                    _shareToken: shareToken
                 });
         }
 
         if (_incentivesControllerP != address(0)) {
+            shareToken = IShareToken(ISiloIncentivesController(_incentivesControllerP).SHARE_TOKEN());
+            ISiloIncentivesController gauge = IGaugeHookReceiver(_hook).configuredGauges(shareToken);
+            
+            if (address(gauge) != address(0)) {
+                console2.log("existing gauge: ", address(gauge));
+                revert("Gauge already configured for protected share token");
+            }
+            
             IGaugeHookReceiver(_hook)
                 .setGauge({
                     _gauge: ISiloIncentivesController(_incentivesControllerP),
-                    _shareToken: IShareToken(ISiloIncentivesController(_incentivesControllerP).SHARE_TOKEN())
+                    _shareToken: shareToken
                 });
         }
 
@@ -206,7 +223,7 @@ contract PermissionedLiquidationControllerDeploy is CommonDeploy, StdCheats {
 
         vm.startPrank(Ownable(_hook).owner());
 
-        IShareToken shareToken = IShareToken(ISiloIncentivesController(_incentivesControllerC).SHARE_TOKEN());
+        shareToken = IShareToken(ISiloIncentivesController(_incentivesControllerC).SHARE_TOKEN());
         IGaugeHookReceiver(_hook).removeGauge(shareToken);
 
         shareToken = IShareToken(ISiloIncentivesController(_incentivesControllerP).SHARE_TOKEN());

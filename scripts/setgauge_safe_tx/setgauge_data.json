@@ -1,5 +1,5 @@
 {
-  "_comment": "Parsed from PR https://github.com/silo-finance/silo-contracts-v3/pull/1902 - comments #4398377863 (Arbitrum), #4398601280 (Mainnet), #4398960421 (Avalanche). Each entry is one setGauge(_gauge, _shareToken) call to be executed against `hook` by its owner. SILO 160 config on Arbitrum was not in comment #4398377863; filled from PR commit message / changelog (config 0xc88734b3D929bb9EAc81F9eada48D6D330a3F37F).",
+  "_comment": "Parsed from PR https://github.com/silo-finance/silo-contracts-v3/pull/1902 - comments #4398377863 (Arbitrum), #4398601280 (Mainnet), #4398960421 (Avalanche), #4405884214 (Sonic). Each entry is one setGauge(_gauge, _shareToken) call to be executed against `hook` by its owner. SILO 160 config on Arbitrum was not in comment #4398377863; filled from PR commit message / changelog (config 0xc88734b3D929bb9EAc81F9eada48D6D330a3F37F).",
   "chains": [
     {
       "name": "Arbitrum",
@@ -178,6 +178,45 @@
           "hook": "0x9b8B655eFa702aa8bbfF3482C4a47aeD4438BbA4",
           "gauge": "0x532728421a7863219eb19357EdCE6DA89013B769",
           "shareToken": "0x8dd4E0cE7A11E5F1c606315815FfbBAc4da83E58",
+          "shareTokenKind": "protectedShareToken"
+        }
+      ]
+    },
+    {
+      "name": "Sonic",
+      "chainId": 146,
+      "rpcEnv": "RPC_SONIC",
+      "calls": [
+        {
+          "siloId": 20,
+          "siloConfig": "0x062A36Bbe0306c2Fd7aecdf25843291fBAB96AD2",
+          "hook": "0x6AAFD9Dd424541885fd79C06FDA96929CFD512f9",
+          "gauge": "0xEd38755a768f7A1db41e6b850D63473714376291",
+          "shareToken": "0xf55902DE87Bd80c6a35614b48d7f8B612a083C12",
+          "shareTokenKind": "collateralShareToken"
+        },
+        {
+          "siloId": 20,
+          "siloConfig": "0x062A36Bbe0306c2Fd7aecdf25843291fBAB96AD2",
+          "hook": "0x6AAFD9Dd424541885fd79C06FDA96929CFD512f9",
+          "gauge": "0xE82Fce0D72E80D2a7d050EfBc7ad59C448d35778",
+          "shareToken": "0xAecD6cBf567AE7dE05f7E32eB051525e9fcd9bc6",
+          "shareTokenKind": "protectedShareToken"
+        },
+        {
+          "siloId": 20,
+          "siloConfig": "0x062A36Bbe0306c2Fd7aecdf25843291fBAB96AD2",
+          "hook": "0x6AAFD9Dd424541885fd79C06FDA96929CFD512f9",
+          "gauge": "0xA8C592a984E75f229F35429Cf6ab6B62B3A8f86f",
+          "shareToken": "0x322e1d5384aa4ED66AeCa770B95686271de61dc3",
+          "shareTokenKind": "collateralShareToken"
+        },
+        {
+          "siloId": 20,
+          "siloConfig": "0x062A36Bbe0306c2Fd7aecdf25843291fBAB96AD2",
+          "hook": "0x6AAFD9Dd424541885fd79C06FDA96929CFD512f9",
+          "gauge": "0x3cDB80123ac6B351752565b287EB9E01B0cB97dA",
+          "shareToken": "0x0B960e953649269B4c895C593108fBc7F8b61a24",
           "shareTokenKind": "protectedShareToken"
         }
       ]

@@ -36,7 +36,8 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 DATA_FILE = SCRIPT_DIR / "setgauge_data.json"
 OUT_DIR = SCRIPT_DIR / "out"
 
-OWNER_SELECTOR = "0x8da5cb5b"  # bytes4(keccak256("owner()"))
+OWNER_SELECTOR = "0x8da5cb5b"               # bytes4(keccak256("owner()"))
+CONFIGURED_GAUGES_SELECTOR = "0xa37d9411"   # bytes4(keccak256("configuredGauges(address)"))
 
 SET_GAUGE_ABI: dict[str, Any] = {
     "inputs": [
@@ -44,6 +45,16 @@ SET_GAUGE_ABI: dict[str, Any] = {
         {"internalType": "contract IShareToken", "name": "_shareToken", "type": "address"},
     ],
     "name": "setGauge",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function",
+}
+
+REMOVE_GAUGE_ABI: dict[str, Any] = {
+    "inputs": [
+        {"internalType": "contract IShareToken", "name": "_shareToken", "type": "address"},
+    ],
+    "name": "removeGauge",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function",
@@ -72,24 +83,38 @@ def rpc_request(rpc_url: str, method: str, params: list[Any], *, timeout: int = 
     return body
 
 
-def eth_call_owner(rpc_url: str, contract: str) -> str:
-    """Call `owner()` on the given contract and return the address (checksummed-form not enforced)."""
-    body = rpc_request(rpc_url, "eth_call", [{"to": contract, "data": OWNER_SELECTOR}, "latest"])
-    raw_hex: str = body["result"]
+def _decode_address_word(raw_hex: str, *, what: str, ctx: str) -> str:
     if not raw_hex or raw_hex == "0x":
-        raise RuntimeError(f"empty owner() return for {contract}")
-    addr_word = raw_hex[2:].rjust(64, "0")
-    if len(addr_word) != 64:
-        raise RuntimeError(f"unexpected owner() return for {contract}: {raw_hex}")
-    addr = "0x" + addr_word[-40:]
-    return addr.lower()
+        raise RuntimeError(f"empty {what} return for {ctx}")
+    word = raw_hex[2:].rjust(64, "0")
+    if len(word) != 64:
+        raise RuntimeError(f"unexpected {what} return for {ctx}: {raw_hex}")
+    return ("0x" + word[-40:]).lower()
+
+
+def eth_call_owner(rpc_url: str, contract: str) -> str:
+    """Call `owner()` on the given contract and return the address (lowercased)."""
+    body = rpc_request(rpc_url, "eth_call", [{"to": contract, "data": OWNER_SELECTOR}, "latest"])
+    return _decode_address_word(body["result"], what="owner()", ctx=contract)
+
+
+def eth_call_configured_gauge(rpc_url: str, hook: str, share_token: str) -> str:
+    """Call `configuredGauges(_shareToken)` on the hook. Returns lowercased address (0x000…0 if unset)."""
+    addr_no0x = share_token.lower().removeprefix("0x").rjust(40, "0")
+    data = CONFIGURED_GAUGES_SELECTOR + addr_no0x.rjust(64, "0")
+    body = rpc_request(rpc_url, "eth_call", [{"to": hook, "data": data}, "latest"])
+    return _decode_address_word(body["result"], what="configuredGauges()", ctx=f"{hook}/{share_token}")
+
+
+def is_zero_address(addr: str) -> bool:
+    return int(addr, 16) == 0
 
 
 def short(addr: str) -> str:
     return addr[:6] + addr[-4:]
 
 
-def build_transaction(call: dict[str, Any]) -> dict[str, Any]:
+def build_set_gauge_tx(call: dict[str, Any]) -> dict[str, Any]:
     return {
         "to": call["hook"],
         "value": "0",
@@ -97,6 +122,18 @@ def build_transaction(call: dict[str, Any]) -> dict[str, Any]:
         "contractMethod": SET_GAUGE_ABI,
         "contractInputsValues": {
             "_gauge": call["gauge"],
+            "_shareToken": call["shareToken"],
+        },
+    }
+
+
+def build_remove_gauge_tx(call: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "to": call["hook"],
+        "value": "0",
+        "data": None,
+        "contractMethod": REMOVE_GAUGE_ABI,
+        "contractInputsValues": {
             "_shareToken": call["shareToken"],
         },
     }
@@ -164,6 +201,25 @@ def main() -> int:
             hook_owner[hook] = owner
             print(f"  hook {hook} -> owner {owner}")
 
+        # Check existing gauge for each (hook, shareToken) pair so we can prepend removeGauge() if needed.
+        # NOTE: we look at on-chain state at "latest". If multiple share tokens in this batch already have
+        # gauges, every one of them gets a removeGauge() inserted right before its setGauge().
+        for c in calls:
+            try:
+                existing = eth_call_configured_gauge(rpc_url, c["hook"], c["shareToken"])
+            except Exception as e:
+                print(
+                    f"ERROR: failed to read configuredGauges({c['shareToken']}) on {c['hook']} via {rpc_env}: {e}",
+                    file=sys.stderr,
+                )
+                return 2
+            c["_existingGauge"] = existing
+            if not is_zero_address(existing):
+                print(
+                    f"  EXISTING gauge on hook {c['hook']} for shareToken {c['shareToken']}: {existing} "
+                    f"(silo {c['siloId']}) -> will prepend removeGauge()"
+                )
+
         owners_set = sorted(set(hook_owner.values()))
         print(f"Distinct hook owners on {chain_name}: {len(owners_set)}")
         for o in owners_set:
@@ -172,16 +228,28 @@ def main() -> int:
 
         for owner in owners_set:
             owner_calls = [c for c in calls if hook_owner[c["hook"]] == owner]
-            transactions = [build_transaction(c) for c in owner_calls]
+            transactions: list[dict[str, Any]] = []
+            remove_count = 0
+            for c in owner_calls:
+                if not is_zero_address(c["_existingGauge"]):
+                    transactions.append(build_remove_gauge_tx(c))
+                    remove_count += 1
+                transactions.append(build_set_gauge_tx(c))
 
             description_lines = [
                 f"Source: PR https://github.com/silo-finance/silo-contracts-v3/pull/1902",
                 f"Chain: {chain_name} (id {chain_id})",
                 f"Hook owner (Safe): {owner}",
+                f"Total tx: {len(transactions)} ({remove_count} removeGauge + {len(owner_calls)} setGauge)",
                 "",
                 "Calls:",
             ]
             for c in owner_calls:
+                if not is_zero_address(c["_existingGauge"]):
+                    description_lines.append(
+                        f"- silo {c['siloId']} | hook {c['hook']} | "
+                        f"removeGauge({c['shareToken']})  [existing gauge: {c['_existingGauge']}]"
+                    )
                 description_lines.append(
                     f"- silo {c['siloId']} | hook {c['hook']} | "
                     f"setGauge({c['gauge']}, {c['shareToken']}) [{c['shareTokenKind']}]"
@@ -198,10 +266,14 @@ def main() -> int:
             owner_short = short(owner)
             out_file = OUT_DIR / f"setGauge_{chain_name}_{owner_short}.json"
             out_file.write_text(json.dumps(batch, indent=2) + "\n")
-            print(f"  -> wrote {out_file.relative_to(SCRIPT_DIR)} ({len(transactions)} tx)")
+            print(
+                f"  -> wrote {out_file.relative_to(SCRIPT_DIR)} "
+                f"({len(transactions)} tx, of which {remove_count} removeGauge)"
+            )
 
             summary.append(
-                f"- {chain_name} | owner {owner} | {len(transactions)} tx | file: {out_file.name}"
+                f"- {chain_name} | owner {owner} | {len(transactions)} tx "
+                f"({remove_count} removeGauge + {len(owner_calls)} setGauge) | file: {out_file.name}"
             )
 
     print("\n" + "\n".join(summary))

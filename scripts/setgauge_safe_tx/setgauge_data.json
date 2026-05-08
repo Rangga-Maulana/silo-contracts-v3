@@ -1,0 +1,186 @@
+{
+  "_comment": "Parsed from PR https://github.com/silo-finance/silo-contracts-v3/pull/1902 - comments #4398377863 (Arbitrum), #4398601280 (Mainnet), #4398960421 (Avalanche). Each entry is one setGauge(_gauge, _shareToken) call to be executed against `hook` by its owner. SILO 160 config on Arbitrum was not in comment #4398377863; filled from PR commit message / changelog (config 0xc88734b3D929bb9EAc81F9eada48D6D330a3F37F).",
+  "chains": [
+    {
+      "name": "Arbitrum",
+      "chainId": 42161,
+      "rpcEnv": "RPC_ARBITRUM",
+      "calls": [
+        {
+          "siloId": 160,
+          "siloConfig": "0xc88734b3D929bb9EAc81F9eada48D6D330a3F37F",
+          "hook": "0x9D9fDDC7cDCE47d58B0B55F563D2d0A2971eE85F",
+          "gauge": "0x22F497c885485fFdD336CCEBb4a81360244ab7e2",
+          "shareToken": "0x24A5eB888a805dD8Cbe3b8eD3672DEa338496B78",
+          "shareTokenKind": "collateralShareToken"
+        },
+        {
+          "siloId": 160,
+          "siloConfig": "0xc88734b3D929bb9EAc81F9eada48D6D330a3F37F",
+          "hook": "0x9D9fDDC7cDCE47d58B0B55F563D2d0A2971eE85F",
+          "gauge": "0x50913D2f7F26Fd76d99b4c9430F52Ea5D68B30c2",
+          "shareToken": "0x2003028E3B69b34035d6ee02d12cf360f8c30E6B",
+          "shareTokenKind": "protectedShareToken"
+        },
+        {
+          "siloId": 162,
+          "siloConfig": "0xD76D4130f5E10409D2361Bf934cf4b4d6E3531DF",
+          "hook": "0xAc623a1d1Ee7023e60288fD2C9eC3FB729F4EE8F",
+          "gauge": "0x578F1d34957E56CCE0D545Df6D30d79D34083Af9",
+          "shareToken": "0x892826Bde29d0bfAbA00220f7d9Fd42D02C36955",
+          "shareTokenKind": "collateralShareToken"
+        },
+        {
+          "siloId": 162,
+          "siloConfig": "0xD76D4130f5E10409D2361Bf934cf4b4d6E3531DF",
+          "hook": "0xAc623a1d1Ee7023e60288fD2C9eC3FB729F4EE8F",
+          "gauge": "0x9C58511018C698C12A9599663dbE60EFBD60314D",
+          "shareToken": "0x5F364B24735E786CA1c6183545e7d5fE8DcDFBdf",
+          "shareTokenKind": "protectedShareToken"
+        }
+      ]
+    },
+    {
+      "name": "Mainnet",
+      "chainId": 1,
+      "rpcEnv": "RPC_MAINNET",
+      "calls": [
+        {
+          "siloId": 3019,
+          "siloConfig": "0x781cDF4235de2166d5C451280E617BC1142DfAe4",
+          "hook": "0x8DF201f7E04932Fc3d27765716bEAf517D201937",
+          "gauge": "0x1547868F42116f0b9c27f8E435F5B4a2155eF324",
+          "shareToken": "0x2ffFd8Ff0a3D94003aE0f43d1Ddd3e2de2A5943B",
+          "shareTokenKind": "collateralShareToken"
+        },
+        {
+          "siloId": 3019,
+          "siloConfig": "0x781cDF4235de2166d5C451280E617BC1142DfAe4",
+          "hook": "0x8DF201f7E04932Fc3d27765716bEAf517D201937",
+          "gauge": "0xe15bf433b9a3E875E7AE37C02F11c82a2809e0c3",
+          "shareToken": "0xce6462d47Fb1B00a028a456837822446997A5Ca7",
+          "shareTokenKind": "protectedShareToken"
+        },
+        {
+          "siloId": 3003,
+          "siloConfig": "0x74b21D458b9D5CF59f4b4E10A2E829C221670EE3",
+          "hook": "0xEB0C0d0bE8a823D8b374f46858cF34028a8E7a3f",
+          "gauge": "0xC3E317bE6223d5e5E675a6a66e9241cC9E2FDCF7",
+          "shareToken": "0xD796071Dc7f9418c1004545bB830429A359C34EB",
+          "shareTokenKind": "collateralShareToken"
+        },
+        {
+          "siloId": 3003,
+          "siloConfig": "0x74b21D458b9D5CF59f4b4E10A2E829C221670EE3",
+          "hook": "0xEB0C0d0bE8a823D8b374f46858cF34028a8E7a3f",
+          "gauge": "0x27f80cfcf78f59fA13D7585d9a80E45ec825e077",
+          "shareToken": "0x13f887FB0e73Cc11B838C6bbfBc61Ea51d29485d",
+          "shareTokenKind": "protectedShareToken"
+        },
+        {
+          "siloId": 184,
+          "siloConfig": "0xaE01a8BdA7799A7aE4D56CC255db56a7e7FaF7F8",
+          "hook": "0x1e339D7B0CFED65821e122e8e9b636de50E28ac4",
+          "gauge": "0x5Bf5CD6B9591aa23cC3D9691e287327818d36116",
+          "shareToken": "0x030B3e6a873C8A1AE9733B291301aB1d2Fa0640E",
+          "shareTokenKind": "collateralShareToken"
+        },
+        {
+          "siloId": 184,
+          "siloConfig": "0xaE01a8BdA7799A7aE4D56CC255db56a7e7FaF7F8",
+          "hook": "0x1e339D7B0CFED65821e122e8e9b636de50E28ac4",
+          "gauge": "0x4d49355a1Cf99f644346662756338302d14E93bc",
+          "shareToken": "0x94b9687Ce7C6364139b0c7B58686233F340aab3B",
+          "shareTokenKind": "protectedShareToken"
+        },
+        {
+          "siloId": 185,
+          "siloConfig": "0xF8D32Da4Ad9378C3754CE846BE02654e52b2C09d",
+          "hook": "0x1Db8aCFbBd40593f96B15f128e4d6c2BA12A2a80",
+          "gauge": "0xb9Df783C9A9C41967095572Dd55107264b91e51A",
+          "shareToken": "0xe394050D179b72197A458Fdfb962Ae69908Aa5A0",
+          "shareTokenKind": "collateralShareToken"
+        },
+        {
+          "siloId": 185,
+          "siloConfig": "0xF8D32Da4Ad9378C3754CE846BE02654e52b2C09d",
+          "hook": "0x1Db8aCFbBd40593f96B15f128e4d6c2BA12A2a80",
+          "gauge": "0x7B8A6a77c76af1FF85F62B1F89414a8F6A3bc915",
+          "shareToken": "0x032503378cd6D523a53Dae6738dc3B3431E06209",
+          "shareTokenKind": "protectedShareToken"
+        },
+        {
+          "siloId": 181,
+          "siloConfig": "0xfAa8b214A896Dfd41FA0aaE07D55E6b15b59357a",
+          "hook": "0x33E7d0c3e302976c5177eD12b7cD9F66CC258002",
+          "gauge": "0xB62320AddEe658B74E8b4EaA924acFf000E2c70e",
+          "shareToken": "0x07fBd3B04F5F9a310f89C8f28CD2a9EF8290f4Aa",
+          "shareTokenKind": "collateralShareToken"
+        },
+        {
+          "siloId": 181,
+          "siloConfig": "0xfAa8b214A896Dfd41FA0aaE07D55E6b15b59357a",
+          "hook": "0x33E7d0c3e302976c5177eD12b7cD9F66CC258002",
+          "gauge": "0x2C01A2536e7cdA8Ad4a3344CbEB237cEAbf47966",
+          "shareToken": "0xafa33D7cD3d6cF775a65B3F04154712cAF11c05b",
+          "shareTokenKind": "protectedShareToken"
+        },
+        {
+          "siloId": 3009,
+          "siloConfig": "0x18B178B50F1fFd3dC7855C893a4e1Ac618F9B76A",
+          "hook": "0x274258eAB9333971adbeFFA61c1F5D2c8E56cE17",
+          "gauge": "0x8705242dEf34da363DBa22226d4307A3053C9Aa3",
+          "shareToken": "0x3B04C3a17cEFd2D4B6edF07c8b095b94dcc53d8E",
+          "shareTokenKind": "collateralShareToken"
+        },
+        {
+          "siloId": 3009,
+          "siloConfig": "0x18B178B50F1fFd3dC7855C893a4e1Ac618F9B76A",
+          "hook": "0x274258eAB9333971adbeFFA61c1F5D2c8E56cE17",
+          "gauge": "0x6BEFEBB79AE67E326275100E996a05e90d647589",
+          "shareToken": "0x9c164A8FE1900DFdB6f72Ce88e91e4C76EA23bCb",
+          "shareTokenKind": "protectedShareToken"
+        }
+      ]
+    },
+    {
+      "name": "Avalanche",
+      "chainId": 43114,
+      "rpcEnv": "RPC_AVALANCHE",
+      "calls": [
+        {
+          "siloId": 142,
+          "siloConfig": "0x33fAdB3dB0A1687Cdd4a55AB0afa94c8102856A1",
+          "hook": "0x809C5Abc4DB4258C077c7c65dAC5bEb994471703",
+          "gauge": "0x15fBebDe7072045Cb82c8614880641DAbCA8A129",
+          "shareToken": "0xDcFFACBed111BA9d59b5e96A85934Db91117BDD9",
+          "shareTokenKind": "collateralShareToken"
+        },
+        {
+          "siloId": 142,
+          "siloConfig": "0x33fAdB3dB0A1687Cdd4a55AB0afa94c8102856A1",
+          "hook": "0x809C5Abc4DB4258C077c7c65dAC5bEb994471703",
+          "gauge": "0x878a47d31BCa5aC722448A5a8c4CCCa2c9d08f8F",
+          "shareToken": "0xF27950C111aEEFdeD6D8C53bD7452E1b3b96aC39",
+          "shareTokenKind": "protectedShareToken"
+        },
+        {
+          "siloId": 162,
+          "siloConfig": "0xcd0d510eec4792a944E8dbe5da54DDD6777f02Ca",
+          "hook": "0x9b8B655eFa702aa8bbfF3482C4a47aeD4438BbA4",
+          "gauge": "0x9D90e407CC1F1adF3770814f94b3443f741312d0",
+          "shareToken": "0x74E54CC5078E73b4042564C2F48e3687c469DaCf",
+          "shareTokenKind": "collateralShareToken"
+        },
+        {
+          "siloId": 162,
+          "siloConfig": "0xcd0d510eec4792a944E8dbe5da54DDD6777f02Ca",
+          "hook": "0x9b8B655eFa702aa8bbfF3482C4a47aeD4438BbA4",
+          "gauge": "0x532728421a7863219eb19357EdCE6DA89013B769",
+          "shareToken": "0x8dd4E0cE7A11E5F1c606315815FfbBAc4da83E58",
+          "shareTokenKind": "protectedShareToken"
+        }
+      ]
+    }
+  ]
+}

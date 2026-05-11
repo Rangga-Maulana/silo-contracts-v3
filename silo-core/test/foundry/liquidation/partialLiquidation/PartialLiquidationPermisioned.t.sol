@@ -19,6 +19,8 @@ import {IntegrationTest} from "silo-foundry-utils/networks/IntegrationTest.sol";
 import {MintableToken} from "../../_common/MintableToken.sol";
 import {SiloLens} from "silo-core/contracts/SiloLens.sol";
 import {ManualLiquidationHelper} from "silo-core/contracts/utils/liquidationHelper/ManualLiquidationHelper.sol";
+import {LiquidationHelper} from "silo-core/contracts/utils/liquidationHelper/LiquidationHelper.sol";
+import {ILiquidationHelper} from "silo-core/contracts/interfaces/ILiquidationHelper.sol";
 import {
     PermissionedLiquidationControllerFactory
 } from "silo-core/contracts/incentives/functional/PermissionedLiquidationControllerFactory.sol";
@@ -201,6 +203,77 @@ contract PartialLiquidationPermissionedTest is SiloLittleHelper, IntegrationTest
         IGaugeHookReceiver(address(partialLiquidation)).removeGauge(IShareToken(protectedShareToken));
         IGaugeHookReceiver(address(partialLiquidation)).removeGauge(IShareToken(collateralShareToken));
         vm.stopPrank();
+    }
+
+    /*
+    FOUNDRY_PROFILE=core_test forge test -vv --ffi --mt test_permisioned_liquidation_transitionCollateral
+    */
+    function test_permisioned_liquidation_transitionCollateral() public {
+        _depositForBorrow(10e6, depositor);
+
+        _deposit(100e18, borrower);
+        _borrow(silo1.maxBorrow(borrower), borrower);
+
+        _withdraw(silo0.maxWithdraw(borrower), borrower);
+
+        _grantAllowedRole();
+
+        uint256 balance = silo0.balanceOf(borrower);
+        assertGt(balance, 0, "collateral");
+
+        vm.prank(borrower);
+        silo0.transitionCollateral(balance, borrower, ISilo.CollateralType.Collateral);
+
+        assertEq(silo0.balanceOf(borrower), 0, "transition did not worked");
+
+        // crosscheck, liquidation should work and transition should work
+        vm.warp(block.timestamp + 3 days);
+        assertFalse(silo0.isSolvent(borrower), "Borrower is still solvent");
+        manualLiquidation.executeLiquidation(siloUsdc, borrower);
+    }
+
+    /*
+    FOUNDRY_PROFILE=core_test forge test -vv --ffi --mt test_permisioned_liquidation_LiquidationHelper
+    */
+    function test_permisioned_liquidation_LiquidationHelper() public {
+        _createPositionToLiquidate(ISilo.CollateralType.Protected);
+
+        _printBorrowerLTV();
+
+        LiquidationHelper helper = new LiquidationHelper(makeAddr("WETH"), makeAddr("ExchangeProxy"), payable(address(this)));
+
+        uint256 maxDebtToCover = silo1.maxRepay(borrower);
+        usdc.mint(address(silo1), maxDebtToCover * 2);
+        usdc.mint(address(helper), maxDebtToCover * 2); // for repay flashloan
+
+        vm.expectRevert(IPermissionedLiquidationController.LiquidationNotAllowed.selector);
+        helper.executeLiquidation({
+            _flashLoanFrom: siloUsdc,
+            _debtAsset: address(usdc),
+            _maxDebtToCover: maxDebtToCover,
+            _liquidation: ILiquidationHelper.LiquidationData({
+                hook: partialLiquidation,
+                collateralAsset: address(weth),
+                user: borrower
+            }),
+            _swapsInputs0x: new ILiquidationHelper.DexSwapInput[](0)
+        });
+
+        _grantAllowedRole(address(helper));
+
+        helper.executeLiquidation({
+            _flashLoanFrom: siloUsdc,
+            _debtAsset: address(usdc),
+            _maxDebtToCover: maxDebtToCover,
+            _liquidation: ILiquidationHelper.LiquidationData({
+                hook: partialLiquidation,
+                collateralAsset: address(weth),
+                user: borrower
+            }),
+            _swapsInputs0x: new ILiquidationHelper.DexSwapInput[](0)
+        });
+
+        _printBorrowerLTV();
     }
 
     /*

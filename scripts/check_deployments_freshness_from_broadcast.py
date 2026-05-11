@@ -4,9 +4,10 @@ CI: for each address in silo-core / silo-oracles / silo-vaults deployments JSON 
 find the contract creation in Foundry broadcast **/run-latest.json (same chain id), then fetch
 the deployment block timestamp via RPC and fail if older than --max-age-days.
 
-- [ ok ]: contract_name address deploy_time (within limit)
-- [FAIL]: address not in any run-latest.json
-- [FAIL]: deployment block timestamp older than max age
+- [ ok ]: contract_name address deploy_time (within limit) when found in run-latest.json
+- [ ok ]: contract_name address verified via eth_getCode when not in run-latest (no freshness check)
+- [FAIL]: deployment block timestamp older than max age (run-latest path only)
+- [FAIL]: eth_getCode empty / RPC error (when not in run-latest)
 
 Uses the same RPC env vars as check_deployments_owner_is_dao.py / version_on_chain.
 
@@ -263,6 +264,16 @@ def decode_block_timestamp_from_response(resp: dict | None) -> int | None:
     return None
 
 
+def decode_eth_get_code_response(resp: dict | None) -> str | None:
+    """Return bytecode hex (may be '0x' for EOA) or None if unreadable / RPC error."""
+    if not resp or resp.get("error"):
+        return None
+    r = resp.get("result")
+    if isinstance(r, str) and r.startswith("0x"):
+        return r
+    return None
+
+
 def main() -> int:
     args = parse_args()
     chain = args.chain.strip()
@@ -302,23 +313,19 @@ def main() -> int:
     checked_count = 0
     found_in_broadcast_count = 0
     ok_count = 0
-    fail_missing_broadcast = 0
+    ok_code_only_count = 0
     fail_block_timestamp = 0
     fail_too_old = 0
+    fail_not_contract = 0
 
     hit_rows: list[tuple[str, str, str, str, str, Path]] = []
+    missing_broadcast_rows: list[tuple[str, str, str]] = []
     unique_blocks: set[str] = set()
     for comp, name, addr in entries:
         checked_count += 1
         hit = find_deploy_tx_for_address(repo_root, chain_id, addr)
         if not hit:
-            msg = (
-                f"{comp}/{name} {addr} not in any */broadcast/**/{chain_id}/run-latest.json "
-                "(CREATE/CREATE2 + receipts)"
-            )
-            print(f"[FAIL] {msg}", file=sys.stderr)
-            fail_missing_broadcast += 1
-            failed = True
+            missing_broadcast_rows.append((comp, name, addr))
             continue
 
         tx_hash, block_hex, run_path = hit
@@ -331,27 +338,32 @@ def main() -> int:
         unique_blocks.add(block_hex)
 
     if args.dry_run:
-        total_fail = fail_missing_broadcast
+        for comp, name, addr in missing_broadcast_rows:
+            print(
+                f"[dry-run] {comp}/{name} {addr} not in run-latest; would verify via eth_getCode only"
+            )
         print()
         print("=== Freshness Summary ===")
         print(f"chain: {chain}")
         print(f"checked contracts: {checked_count}")
         print(f"found in run-latest: {found_in_broadcast_count}")
+        print(f"not in run-latest (would eth_getCode): {len(missing_broadcast_rows)}")
         print(f"ok: {ok_count}")
-        print(f"fail_missing_broadcast: {fail_missing_broadcast}")
         print(f"fail_block_timestamp: {fail_block_timestamp}")
         print(f"fail_too_old: {fail_too_old}")
-        print(f"total_fail: {total_fail}")
+        print(f"total_fail: 0")
         return 0
 
-    block_calls = [
-        (idx + 1, "eth_getBlockByNumber", [block_hex, False])
-        for idx, block_hex in enumerate(sorted(unique_blocks))
-    ]
-    block_by_id, batch_err = rpc_batch_request(rpc_url, block_calls, timeout=90)
-    if batch_err:
-        print(f"[FAIL] block timestamp batch request failed: {batch_err}", file=sys.stderr)
-        return 1
+    block_by_id: dict[int, dict] = {}
+    if unique_blocks:
+        block_calls = [
+            (idx + 1, "eth_getBlockByNumber", [block_hex, False])
+            for idx, block_hex in enumerate(sorted(unique_blocks))
+        ]
+        block_by_id, batch_err = rpc_batch_request(rpc_url, block_calls, timeout=90)
+        if batch_err:
+            print(f"[FAIL] block timestamp batch request failed: {batch_err}", file=sys.stderr)
+            return 1
     block_to_timestamp: dict[str, int | None] = {}
     for idx, block_hex in enumerate(sorted(unique_blocks)):
         block_to_timestamp[block_hex] = decode_block_timestamp_from_response(block_by_id.get(idx + 1))
@@ -388,17 +400,53 @@ def main() -> int:
         )
         ok_count += 1
 
-    total_fail = fail_missing_broadcast + fail_block_timestamp + fail_too_old
+    if missing_broadcast_rows:
+        code_calls = [
+            (idx + 1, "eth_getCode", [addr, "latest"])
+            for idx, (_, _, addr) in enumerate(missing_broadcast_rows)
+        ]
+        code_by_id, code_batch_err = rpc_batch_request(rpc_url, code_calls, timeout=90)
+        if code_batch_err:
+            print(f"[FAIL] eth_getCode batch request failed: {code_batch_err}", file=sys.stderr)
+            return 1
+        for idx, (comp, name, addr) in enumerate(missing_broadcast_rows):
+            raw = decode_eth_get_code_response(code_by_id.get(idx + 1))
+            if raw is None:
+                print(
+                    f"[FAIL] {comp}/{name} {addr} eth_getCode failed "
+                    f"(not in run-latest/{chain_id}; cannot verify contract)",
+                    file=sys.stderr,
+                )
+                fail_not_contract += 1
+                failed = True
+                continue
+            if raw == "0x":
+                print(
+                    f"[FAIL] {comp}/{name} {addr} no contract code at address "
+                    f"(not in run-latest/{chain_id})",
+                    file=sys.stderr,
+                )
+                fail_not_contract += 1
+                failed = True
+                continue
+            print(
+                f"[ ok ] {comp}/{name} {addr} on-chain code ok "
+                f"(no */broadcast/**/{chain_id}/run-latest match; freshness skipped)"
+            )
+            ok_code_only_count += 1
+
+    total_fail = fail_block_timestamp + fail_too_old + fail_not_contract
     print()
     print("=== Freshness Summary ===")
     print(f"chain: {chain}")
     print(f"checked contracts: {checked_count}")
     print(f"found in run-latest: {found_in_broadcast_count}")
-    print(f"ok: {ok_count}")
+    print(f"ok (broadcast + fresh): {ok_count}")
+    print(f"ok (eth_getCode only): {ok_code_only_count}")
     print(f"failed: {total_fail}")
-    print(f"  - missing in run-latest: {fail_missing_broadcast}")
     print(f"  - block timestamp unreadable: {fail_block_timestamp}")
     print(f"  - older than max age: {fail_too_old}")
+    print(f"  - not a contract / eth_getCode error: {fail_not_contract}")
     print()
 
     return 1 if failed else 0

@@ -94,7 +94,7 @@ contract PermissionedLiquidationController is
     }
 
     function VERSION() external pure virtual returns (string memory) { // solhint-disable-line func-name-mixedcase
-        return "PermissionedLiquidationController 4.16.0";
+        return "PermissionedLiquidationController 4.17.0";
     }
 
     function afterTokenTransfer(

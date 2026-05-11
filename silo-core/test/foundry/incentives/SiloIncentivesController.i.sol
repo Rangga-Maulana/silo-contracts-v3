@@ -11,6 +11,7 @@ import {ISiloIncentivesController} from "silo-core/contracts/incentives/interfac
 import {IDistributionManager} from "silo-core/contracts/incentives/interfaces/IDistributionManager.sol";
 import {Hook} from "silo-core/contracts/lib/Hook.sol";
 import {SiloMathLib} from "silo-core/contracts/lib/SiloMathLib.sol";
+import {HookReceiverBootstrapMock} from "silo-core/test/foundry/_mocks/HookReceiverBootstrapMock.sol";
 
 import {SiloConfigOverride} from "../_common/fixtures/SiloFixture.sol";
 import {SiloFixture} from "../_common/fixtures/SiloFixture.sol";
@@ -18,7 +19,7 @@ import {SiloFixture} from "../_common/fixtures/SiloFixture.sol";
 import {MintableToken} from "../_common/MintableToken.sol";
 import {SiloLittleHelper} from "../_common/SiloLittleHelper.sol";
 
-contract HookContract {
+contract HookContract is HookReceiverBootstrapMock {
     SiloIncentivesControllerCompatible controller;
     MintableToken notifierToken;
 
@@ -37,7 +38,7 @@ contract HookContract {
         return notifierToken.balanceOf(_user);
     }
 
-    function hookReceiverConfig(address) external pure returns (uint24 hooksBefore, uint24 hooksAfter) {
+    function hookReceiverConfig(address) external pure override returns (uint24 hooksBefore, uint24 hooksAfter) {
         hooksBefore = 0;
         hooksAfter = uint24(Hook.SHARE_TOKEN_TRANSFER | Hook.COLLATERAL_TOKEN);
     }
@@ -57,7 +58,7 @@ contract HookContract {
 }
 
 /*
- FOUNDRY_PROFILE=core_test forge test -vv --ffi --mc SiloIncentivesControllerTest
+ FOUNDRY_PROFILE=core_test forge test -vv --ffi --mc SiloIncentivesControllerIntegrationTest
 */
 contract SiloIncentivesControllerIntegrationTest is SiloLittleHelper, Test {
     using SafeCast for uint256;
@@ -80,7 +81,7 @@ contract SiloIncentivesControllerIntegrationTest is SiloLittleHelper, Test {
     event ClaimerSet(address indexed user, address indexed claimer);
 
     function setUp() public {
-        hook = new HookContract();
+        HookContract hookImplementation = new HookContract();
 
         token0 = new MintableToken(18);
         token1 = new MintableToken(18);
@@ -101,9 +102,11 @@ contract SiloIncentivesControllerIntegrationTest is SiloLittleHelper, Test {
         SiloConfigOverride memory overrides;
         overrides.token0 = address(token0);
         overrides.token1 = address(token1);
-        overrides.hookReceiver = address(hook);
+        overrides.hookReceiverImplementation = address(hookImplementation);
 
-        (, silo0, silo1,,,) = siloFixture.deploy_local(overrides);
+        address hookReceiver;
+        (, silo0, silo1,,, hookReceiver) = siloFixture.deploy_local(overrides);
+        hook = HookContract(hookReceiver);
 
         __init(token0, token1, silo0, silo1);
 

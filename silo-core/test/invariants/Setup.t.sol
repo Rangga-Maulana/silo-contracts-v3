@@ -39,8 +39,16 @@ import {ISilo} from "silo-core/contracts/Silo.sol";
 import {DynamicKinkModelFactory} from "silo-core/contracts/interestRateModel/kink/DynamicKinkModelFactory.sol";
 import {IDynamicKinkModelFactory} from "silo-core/contracts/interfaces/IDynamicKinkModelFactory.sol";
 import {DynamicKinkModel} from "silo-core/contracts/interestRateModel/kink/DynamicKinkModel.sol";
-import {ISiloIncentivesControllerFactory} from "silo-core/contracts/incentives/interfaces/ISiloIncentivesControllerFactory.sol";
+import {
+    ISiloIncentivesControllerFactory
+} from "silo-core/contracts/incentives/interfaces/ISiloIncentivesControllerFactory.sol";
 import {SiloIncentivesControllerFactory} from "silo-core/contracts/incentives/SiloIncentivesControllerFactory.sol";
+import {
+    IPermissionedLiquidationControllerFactory
+} from "silo-core/contracts/incentives/functional/PermissionedLiquidationControllerFactory.sol";
+import {
+    PermissionedLiquidationControllerFactory
+} from "silo-core/contracts/incentives/functional/PermissionedLiquidationControllerFactory.sol";
 
 /// @notice Setup contract for the invariant test Suite, inherited by Tester
 contract Setup is BaseTest {
@@ -214,6 +222,7 @@ contract Setup is BaseTest {
         shareProtectedCollateralTokenImpl = address(new ShareProtectedCollateralToken());
         shareDebtTokenImpl = address(new ShareDebtToken());
         address siloIncentivesControllerFactory = address(new SiloIncentivesControllerFactory());
+        address permissionedLiquidationControllerFactory = address(new PermissionedLiquidationControllerFactory());
 
         siloDeployer = ISiloDeployer(
             address(
@@ -222,6 +231,7 @@ contract Setup is BaseTest {
                     IDynamicKinkModelFactory(dkinkIRMConfigFactory),
                     siloFactory,
                     ISiloIncentivesControllerFactory(siloIncentivesControllerFactory),
+                    IPermissionedLiquidationControllerFactory(permissionedLiquidationControllerFactory),
                     siloImpl,
                     shareProtectedCollateralTokenImpl,
                     shareDebtTokenImpl

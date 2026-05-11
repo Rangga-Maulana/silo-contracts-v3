@@ -17,7 +17,7 @@ contract HookReceiver is IHookReceiver, Test {
 
     uint24 hooksBefore;
     uint24 hooksAfter;
-    ISiloConfig siloConfig;
+    ISiloConfig public siloConfig;
 
     function initialize(ISiloConfig _siloConfig, bytes calldata) external {
         siloConfig = _siloConfig;

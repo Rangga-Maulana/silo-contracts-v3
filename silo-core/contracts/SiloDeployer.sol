@@ -4,7 +4,7 @@ pragma solidity 0.8.28;
 import {Clones} from "openzeppelin5/proxy/Clones.sol";
 
 import {Create2Factory} from "common/utils/Create2Factory.sol";
-import {Ownable1and2Steps} from "common/access/Ownable1and2Steps.sol";
+import {Ownable1and2Steps, Ownable} from "common/access/Ownable1and2Steps.sol";
 
 import {ISiloConfig} from "silo-core/contracts/interfaces/ISiloConfig.sol";
 import {ISiloFactory} from "silo-core/contracts/interfaces/ISiloFactory.sol";
@@ -21,20 +21,27 @@ import {IGaugeHookReceiver} from "silo-core/contracts/interfaces/IGaugeHookRecei
 import {IShareToken} from "silo-core/contracts/interfaces/IShareToken.sol";
 import {IPartialLiquidationByDefaulting} from "silo-core/contracts/interfaces/IPartialLiquidationByDefaulting.sol";
 import {ISiloIncentivesController} from "silo-core/contracts/incentives/interfaces/ISiloIncentivesController.sol";
+import {
+    IPermissionedLiquidationControllerFactory
+} from "silo-core/contracts/interfaces/IPermissionedLiquidationControllerFactory.sol";
 
 import {SiloConfig} from "silo-core/contracts/SiloConfig.sol";
 import {CloneDeterministic} from "silo-core/contracts/lib/CloneDeterministic.sol";
 import {Views} from "silo-core/contracts/lib/Views.sol";
 import {Whitelist} from "silo-core/contracts/hooks/_common/Whitelist.sol";
 import {IVersioned} from "silo-core/contracts/interfaces/IVersioned.sol";
+import {TransparentProxy} from "silo-core/contracts/utils/TransparentProxy.sol";
 
 /// @notice Silo Deployer
 contract SiloDeployer is Create2Factory, ISiloDeployer, IVersioned {
+    bytes32 internal constant ALLOWED_ROLE = keccak256("ALLOWED_ROLE");
+
     // solhint-disable var-name-mixedcase
     IInterestRateModelV2Factory public immutable IRM_CONFIG_FACTORY;
     IDynamicKinkModelFactory public immutable DYNAMIC_KINK_MODEL_FACTORY;
     ISiloFactory public immutable SILO_FACTORY;
     ISiloIncentivesControllerFactory public immutable SILO_INCENTIVES_CONTROLLER_FACTORY;
+    IPermissionedLiquidationControllerFactory public immutable PERMISSIONED_LIQUIDATION_CONTROLLER_FACTORY;
     address public immutable SILO_IMPL;
     address public immutable SHARE_PROTECTED_COLLATERAL_TOKEN_IMPL;
     address public immutable SHARE_DEBT_TOKEN_IMPL;
@@ -43,14 +50,12 @@ contract SiloDeployer is Create2Factory, ISiloDeployer, IVersioned {
     /// @notice variable to store the final hook owner
     address internal transient _finalHookOwner;
 
-    /// @notice TRUE is hook has defaulting liquidation
-    bool internal transient _gaugeRequired;
-
     constructor(
         IInterestRateModelV2Factory _irmConfigFactory,
         IDynamicKinkModelFactory _dynamicKinkModelFactory,
         ISiloFactory _siloFactory,
         ISiloIncentivesControllerFactory _siloIncentivesControllerFactory,
+        IPermissionedLiquidationControllerFactory _permissionedLiquidationControllerFactory,
         address _siloImpl,
         address _shareProtectedCollateralTokenImpl,
         address _shareDebtTokenImpl
@@ -59,6 +64,7 @@ contract SiloDeployer is Create2Factory, ISiloDeployer, IVersioned {
         DYNAMIC_KINK_MODEL_FACTORY = _dynamicKinkModelFactory;
         SILO_FACTORY = _siloFactory;
         SILO_INCENTIVES_CONTROLLER_FACTORY = _siloIncentivesControllerFactory;
+        PERMISSIONED_LIQUIDATION_CONTROLLER_FACTORY = _permissionedLiquidationControllerFactory;
         SILO_IMPL = _siloImpl;
         SHARE_PROTECTED_COLLATERAL_TOKEN_IMPL = _shareProtectedCollateralTokenImpl;
         SHARE_DEBT_TOKEN_IMPL = _shareDebtTokenImpl;
@@ -70,7 +76,8 @@ contract SiloDeployer is Create2Factory, ISiloDeployer, IVersioned {
         bytes calldata _irmConfigData0,
         bytes calldata _irmConfigData1,
         ClonableHookReceiver calldata _clonableHookReceiver,
-        ISiloConfig.InitData memory _siloInitData
+        ISiloConfig.InitData memory _siloInitData,
+        MarketOptions calldata _marketOptions
     ) external returns (ISiloConfig siloConfig) {
         // setUp IRMs (create if needed) and update `_siloInitData`
         _setUpIRMs(_irmConfigData0, _irmConfigData1, _siloInitData);
@@ -90,45 +97,153 @@ contract SiloDeployer is Create2Factory, ISiloDeployer, IVersioned {
             _creator: msg.sender
         });
 
-        _gaugeRequired = _isDefaultingHook(_siloInitData.hookReceiver);
-
         // initialize hook receiver only if it was cloned
-        _initializeHookReceiver(_siloInitData, siloConfig, _clonableHookReceiver);
+        bool isInitialized = _initializeHookReceiver(_siloInitData, siloConfig, _clonableHookReceiver);
 
-        _createIncentivesController(siloConfig, _siloInitData);
+        if (isInitialized) {
+            // only when this is new hook
+            _createIncentivesControllerForDefaulting({
+                _siloConfig: siloConfig,
+                _hookReceiver: _siloInitData.hookReceiver,
+                _lt0: _siloInitData.lt0,
+                _permissionedLiquidators: _marketOptions.permissionedLiquidators
+            });
+        }
+
+        if (_marketOptions.addressesWithPausableRole.length != 0) {
+            _createPermissionedIncentivesControllers({
+                _siloConfig: siloConfig,
+                _hookReceiver: _siloInitData.hookReceiver,
+                _lt0: _siloInitData.lt0,
+                _lt1: _siloInitData.lt1,
+                _addressesWithPausableRole: _marketOptions.addressesWithPausableRole
+            });
+        }
+
+        if (isInitialized) {
+            // only if this is new hook
+            Ownable1and2Steps(_siloInitData.hookReceiver).transferOwnership1Step(_finalHookOwner);
+        }
 
         emit SiloCreated(siloConfig);
     }
 
     /// @inheritdoc IVersioned
     function VERSION() external pure returns (string memory version) {
-        return "SiloDeployer 4.4.2";
+        return "SiloDeployer 4.16.0";
     }
 
     /// @notice Create an incentives controller if the hook is defaulting
-    function _createIncentivesController(ISiloConfig _siloConfig, ISiloConfig.InitData memory _siloInitData)
+    function _createIncentivesControllerForDefaulting(
+        ISiloConfig _siloConfig, 
+        address _hookReceiver, 
+        uint256 _lt0,
+        address[] calldata _permissionedLiquidators
+    )
         internal
     {
-        if (!_gaugeRequired) return;
+        if (!_isDefaultingHook(_hookReceiver)) return;
 
-        address debtSilo = _getDebtSilo(_siloConfig, _siloInitData);
+        address debtSilo = _getDebtSilo(_siloConfig, _lt0);
 
         address incentivesController = SILO_INCENTIVES_CONTROLLER_FACTORY.create({
             _owner: _finalHookOwner,
-            _notifier: _siloInitData.hookReceiver,
+            _notifier: _hookReceiver,
             _shareToken: debtSilo,
             _externalSalt: bytes32(0)
         });
 
-        IGaugeHookReceiver(_siloInitData.hookReceiver).setGauge({
+        IGaugeHookReceiver(_hookReceiver).setGauge({
             _gauge: ISiloIncentivesController(incentivesController), 
             _shareToken: IShareToken(debtSilo)
         });
 
-        Ownable1and2Steps(_siloInitData.hookReceiver).transferOwnership1Step(_finalHookOwner);
-        bytes32 defaultAdminRole = Whitelist(address(_siloInitData.hookReceiver)).DEFAULT_ADMIN_ROLE();
-        Whitelist(address(_siloInitData.hookReceiver)).grantRole(defaultAdminRole, _finalHookOwner);
-        Whitelist(address(_siloInitData.hookReceiver)).revokeRole(defaultAdminRole, address(this));
+        _whitelistLiquidators(_hookReceiver, _permissionedLiquidators);
+
+        // we have Whitelist interface for HookV2/V3, so we have to transfer roles
+        _transferDefaultAdminRole(_hookReceiver);
+    }
+
+    function _whitelistLiquidators(address _hookReceiver, address[] calldata _addresses) internal {
+        uint256 c = _addresses.length;
+        if (c == 0) return;
+
+        for (uint256 i = 0; i < c; i++) {
+            Whitelist(_hookReceiver).grantRole(ALLOWED_ROLE, _addresses[i]);
+        }
+    }
+    
+    function _createPermissionedIncentivesControllers(
+        ISiloConfig _siloConfig, 
+        address _hookReceiver, 
+        uint256 _lt0, 
+        uint256 _lt1,
+        address[] calldata _addressesWithPausableRole
+    )
+        internal
+    {
+        (address silo0, address silo1) = _siloConfig.getSilos();
+
+        if (_lt0 != 0) {
+            _createPermissionedIncentivesControllerForSilo(_siloConfig, _hookReceiver, silo0, _addressesWithPausableRole);
+        }
+        
+        if (_lt1 != 0) {
+            _createPermissionedIncentivesControllerForSilo(_siloConfig, _hookReceiver, silo1, _addressesWithPausableRole);
+        }
+    }
+    
+    function _createPermissionedIncentivesControllerForSilo(
+        ISiloConfig _siloConfig, 
+        address _hookReceiver,
+        address _silo,
+        address[] calldata _addressesWithPausableRole
+    )
+        internal
+    {
+        (address protectedShareToken, address collateralShareToken,) = _siloConfig.getShareTokens(_silo);
+
+        _createPermissionedIncentivesController(_hookReceiver, collateralShareToken, _addressesWithPausableRole);
+        _createPermissionedIncentivesController(_hookReceiver, protectedShareToken, _addressesWithPausableRole);
+    }
+    
+    function _createPermissionedIncentivesController(
+        address _hookReceiver, 
+        address _shareToken, 
+        address[] calldata _addressesWithPausableRole
+    )
+        internal
+    {
+        address incentivesController = PERMISSIONED_LIQUIDATION_CONTROLLER_FACTORY.create(IShareToken(_shareToken));
+
+        _whitelistAddressesWithPausableRole(incentivesController, _addressesWithPausableRole);
+
+        IGaugeHookReceiver(_hookReceiver).setGauge({
+            _gauge: ISiloIncentivesController(incentivesController), 
+            _shareToken: IShareToken(_shareToken)
+        });
+
+        // The controller is a proxy and owner is inherited from a hook, and hook has temporary owner set at the moment
+        // so we have to transfer ownership.
+        Ownable(TransparentProxy(payable(incentivesController)).getAdmin()).transferOwnership(_finalHookOwner);
+
+        // for permissioned controller we have whitelist for liquidators
+        _transferDefaultAdminRole(incentivesController);
+    }
+
+    function _whitelistAddressesWithPausableRole(address _controller, address[] calldata _addresses) internal {
+        uint256 c = _addresses.length;
+        if (c == 0) return;
+
+        for (uint256 i = 0; i < c; i++) {
+            Whitelist(_controller).grantRole(ALLOWED_ROLE, _addresses[i]);
+        }
+    }
+    
+    function _transferDefaultAdminRole(address _whitelist) internal {
+        bytes32 defaultAdminRole = bytes32(0);
+        Whitelist(_whitelist).grantRole(defaultAdminRole, _finalHookOwner);
+        Whitelist(_whitelist).revokeRole(defaultAdminRole, address(this));
     }
 
     function _isDefaultingHook(address _hook) internal view returns (bool isDefaulting) {
@@ -144,13 +259,14 @@ contract SiloDeployer is Create2Factory, ISiloDeployer, IVersioned {
         }
     }
 
-    function _getDebtSilo(ISiloConfig _siloConfig, ISiloConfig.InitData memory _siloInitData)
+    // For two-way markets, it's simply get the silos
+    function _getDebtSilo(ISiloConfig _siloConfig, uint256 _lt0)
         internal
         view
         returns (address debtSilo)
     {
         (address silo0, address silo1) = _siloConfig.getSilos();
-        debtSilo = _siloInitData.lt0 == 0 ? silo0 : silo1;
+        debtSilo = _lt0 == 0 ? silo0 : silo1;
     }
 
     /// @notice Deploy `SiloConfig` with predicted addresses
@@ -296,7 +412,7 @@ contract SiloDeployer is Create2Factory, ISiloDeployer, IVersioned {
     /// @notice Create an oracle if it is not specified in the `_siloInitData` and has tx details for the creation
     /// @param _siloInitData Silo configuration for the silo creation
     /// @param _oracles Oracles creation details (factory and creation tx input)
-    function _createOracles(ISiloConfig.InitData memory _siloInitData, Oracles memory _oracles) internal {
+    function _createOracles(ISiloConfig.InitData memory _siloInitData, Oracles calldata _oracles) internal {
         if (_siloInitData.solvencyOracle0 == address(0)) {
             _siloInitData.solvencyOracle0 = _createOracle(_oracles.solvencyOracle0);
         }
@@ -360,20 +476,21 @@ contract SiloDeployer is Create2Factory, ISiloDeployer, IVersioned {
         ISiloConfig.InitData memory _siloInitData,
         ISiloConfig _siloConfig,
         ClonableHookReceiver calldata _clonableHookReceiver
-    ) internal {
+    ) internal returns (bool isInitialized) {
         if (_clonableHookReceiver.implementation != address(0)) {
-            if (_gaugeRequired) {
-                require(_clonableHookReceiver.initializationData.length == 32, InvalidHookInitData());
-                
-                (_finalHookOwner) = abi.decode(_clonableHookReceiver.initializationData, (address));
-            }
+            // init data must be address
+            require(_clonableHookReceiver.initializationData.length == 32, InvalidHookInitData());
+            
+            (_finalHookOwner) = abi.decode(_clonableHookReceiver.initializationData, (address));
 
             IHookReceiver(_siloInitData.hookReceiver)
                 .initialize({
                     _siloConfig: _siloConfig,
                     // override owner so we can set the incentives controller
-                    _data: _gaugeRequired ? abi.encode(address(this)) : _clonableHookReceiver.initializationData
+                    _data: abi.encode(address(this))
                 });
+
+            isInitialized = true;
         }
     }
 

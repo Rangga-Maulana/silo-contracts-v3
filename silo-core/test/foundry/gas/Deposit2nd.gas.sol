@@ -8,7 +8,7 @@ import {ISilo} from "silo-core/contracts/interfaces/ISilo.sol";
 import {Gas} from "./Gas.sol";
 
 /*
-forge test -vv --ffi --mt test_gas_ | grep -i '\[GAS\]'
+FOUNDRY_PROFILE=core_test forge test -vv --ffi --mt test_gas_ | grep -i '\[GAS\]'
 */
 contract Deposit2ndGasTest is Gas, Test {
     function setUp() public {

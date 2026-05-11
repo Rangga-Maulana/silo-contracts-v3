@@ -5,6 +5,28 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
+### Changed
+- additional options for silo deployer (#1904)
+
+## [4.16.0] - 2026-05-11
+### Added
+- ManualLiquidationHelper deployment
+- flat price oracle (#1889)
+
+### Updated
+- remove pausing from gauge + fix (#1906)
+- allow `PermissionedLiquidationController` set for debt share token (#1896)
+
+### Removed
+- revert deployed gauges (with pausing feature)
+
+### Markets
+- silo-market: apyUSD / USDC on Ethereum Mainnet (#1890)
+- silo-market: WXDC / USDC on XDC Network (#1888)
+- silo-market: apyUSD / apxUSD on Ethereum Mainnet (#1884)
+- new market: savUSD / USDm on MegaETH (#1901)
+- silo-market: savUSD / U on BNB Chain (#1894)
+- silo-market: apyUSD / USDC on Ethereum Mainnet (#1885)
 
 ## [4.15.0] - 2026-05-08
 ### Added

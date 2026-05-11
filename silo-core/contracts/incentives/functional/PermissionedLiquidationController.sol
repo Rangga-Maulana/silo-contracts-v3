@@ -14,6 +14,7 @@ import {
     IPermissionedLiquidationController
 } from "silo-core/contracts/interfaces/IPermissionedLiquidationController.sol";
 import {Whitelist} from "silo-core/contracts/hooks/_common/Whitelist.sol";
+import {ShareTokenLib} from "silo-core/contracts/lib/ShareTokenLib.sol";
 
 /// @dev this contract should be set as a gauge for collateral or protected share tokens.
 /// It will not work if it will be set for the shared debt token.
@@ -54,7 +55,6 @@ contract PermissionedLiquidationController is
         _permisionedData = PermisionedData({
             anySilo: address(silo), 
             enabled: false, 
-            pauseTokenTransfer: false,
             shateTokenIsDebtToken: cfg.debtShareToken == address(_shareToken)
         });
 
@@ -67,20 +67,6 @@ contract PermissionedLiquidationController is
 
         _permisionedData.enabled = _enabled;
         emit EnabledChanged(_enabled);
-    }
-
-    /// @inheritdoc IPermissionedLiquidationController
-    function setPause(bool _pauseTokenTransfer) external onlyOwner {
-        require(_permisionedData.pauseTokenTransfer != _pauseTokenTransfer, PauseTokenTransferAlreadySet());
-
-        _permisionedData.pauseTokenTransfer = _pauseTokenTransfer;
-
-        if (_pauseTokenTransfer) {
-            _permisionedData.enabled = true;
-            emit EnabledChanged(true);
-        }
-
-        emit PauseTokenTransferChanged(_pauseTokenTransfer);
     }
 
     /// @inheritdoc IPermissionedLiquidationController
@@ -108,13 +94,13 @@ contract PermissionedLiquidationController is
     }
 
     function VERSION() external pure virtual returns (string memory) { // solhint-disable-line func-name-mixedcase
-        return "PermissionedLiquidationController 4.13.1";
+        return "PermissionedLiquidationController 4.16.0";
     }
 
     function afterTokenTransfer(
         address _sender,
         uint256 /*_senderBalance*/,
-        address /*_recipient*/,
+        address _recipient,
         uint256 /*_recipientBalance*/,
         uint256 /*_totalSupply*/,
         uint256 /*_amount*/
@@ -128,12 +114,14 @@ contract PermissionedLiquidationController is
 
         if (!data.enabled) return;
 
-        if (data.pauseTokenTransfer) revert PauseTokenTransferActive();
-
         if (_liquidationAllowed) return;
 
         // for debt token we can not revert, because it migth revert regular repay
         if (data.shateTokenIsDebtToken) return;
+
+        // Mint/burn also invoke this hook; solvency can be wrong mid-operation (eg transitionCollateral after burn,
+        // before mint). Real liquidations move collateral via ERC20 transfer (forwardTransferFromNoChecks).
+        if (!ShareTokenLib.isTransfer(_sender, _recipient)) return;
 
         // is this liquidation?
         // After transferring collateral, the user will always be insolvent.

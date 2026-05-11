@@ -15,7 +15,7 @@ import {ILiquidationHelper} from "silo-core/contracts/interfaces/ILiquidationHel
 import {ISiloOracle} from "silo-core/contracts/interfaces/ISiloOracle.sol";
 
 abstract contract UserState is Test {
-    SiloLens internal constant LENS = SiloLens(0xB95AD415b0fcE49f84FbD5B26b14ec7cf4822c69);
+    SiloLens internal constant LENS = SiloLens(0xB477131cf512fE4D2F46888B7A352763a168a30C);
     address internal immutable SWAP_ALLOWANCE_HOLDER;
     address internal constant WETH = 0x50c42dEAcD8Fc9773493ED674b675bE577f2634b;
     address internal constant WS = 0x039e2fB66102314Ce7b64Ce5Ce3E5183bc94aD38;
@@ -51,6 +51,7 @@ abstract contract UserState is Test {
         console2.log("user: ", _user);
 
         console2.log("collateral silo: ", collateralCfg.silo);
+        console2.log("collateral silo liquidity: ", ISilo(collateralCfg.silo).getLiquidity());
         console2.log("collateral asset: ", collateralSymbol, collateralCfg.token);
         console2.log("      debt silo: ", debtCfg.silo);
         console2.log("      debt asset: ", debtSymbol, debtCfg.token);
@@ -80,6 +81,22 @@ abstract contract UserState is Test {
         );
         emit log_named_decimal_uint(
             "      debt value: ", ISiloOracle(debtCfg.solvencyOracle).quote(debtToRepay, debtCfg.token), 18
+        );
+    }
+
+    function _decodeLiquidationData(bytes memory _rawFunctionInput)
+        internal
+        pure
+        returns (
+            address flashLoanFrom,
+            address debtAsset,
+            uint256 maxDebtToCover,
+            ILiquidationHelper.LiquidationData memory liquidation,
+            ILiquidationHelper.DexSwapInput[] memory dexSwapInput
+        )
+    {
+        (flashLoanFrom, debtAsset, maxDebtToCover, liquidation, dexSwapInput) = abi.decode(
+            _rawFunctionInput, (address, address, uint256, ILiquidationHelper.LiquidationData, ILiquidationHelper.DexSwapInput[])
         );
     }
 }

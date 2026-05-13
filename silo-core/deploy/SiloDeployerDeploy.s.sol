@@ -14,16 +14,12 @@ import {ISiloDeployer} from "silo-core/contracts/interfaces/ISiloDeployer.sol";
 import {
     ISiloIncentivesControllerFactory
 } from "silo-core/contracts/incentives/interfaces/ISiloIncentivesControllerFactory.sol";
-import {
-    IPermissionedLiquidationControllerFactory
-} from "silo-core/contracts/interfaces/IPermissionedLiquidationControllerFactory.sol";
-
 import {SiloImplementationDeploy} from "./SiloImplementationDeploy.s.sol";
 
 /*
     FOUNDRY_PROFILE=core \
         forge script silo-core/deploy/SiloDeployerDeploy.s.sol \
-        --ffi --rpc-url $RPC_INJECTIVE --broadcast --slow --verify
+        --ffi --rpc-url $RPC_MAINNET --broadcast --slow --verify
 
     XDC chain deployment:
 
@@ -122,16 +118,6 @@ contract SiloDeployerDeploy is CommonDeploy {
 
         console2.log("siloIncentivesControllerFactory", siloIncentivesControllerFactory);
 
-        address permissionedLiquidationControllerFactory =
-            SiloCoreDeployments.get(SiloCoreContracts.PERMISSIONED_LIQUIDATION_CONTROLLER_FACTORY, chainAlias);
-
-        require(
-            permissionedLiquidationControllerFactory != address(0),
-            string.concat(SiloCoreContracts.PERMISSIONED_LIQUIDATION_CONTROLLER_FACTORY, " not deployed")
-        );
-
-        console2.log("permissionedLiquidationControllerFactory", permissionedLiquidationControllerFactory);
-
         address dkinkIRMConfigFactory =
             SiloCoreDeployments.get(SiloCoreContracts.DYNAMIC_KINK_MODEL_FACTORY, chainAlias);
 
@@ -167,7 +153,6 @@ contract SiloDeployerDeploy is CommonDeploy {
                     IDynamicKinkModelFactory(dkinkIRMConfigFactory),
                     ISiloFactory(siloFactory),
                     ISiloIncentivesControllerFactory(siloIncentivesControllerFactory),
-                    IPermissionedLiquidationControllerFactory(permissionedLiquidationControllerFactory),
                     siloImpl,
                     shareProtectedCollateralTokenImpl,
                     shareDebtTokenImpl

@@ -21,10 +21,6 @@ import {IGaugeHookReceiver} from "silo-core/contracts/interfaces/IGaugeHookRecei
 import {IShareToken} from "silo-core/contracts/interfaces/IShareToken.sol";
 import {IPartialLiquidationByDefaulting} from "silo-core/contracts/interfaces/IPartialLiquidationByDefaulting.sol";
 import {ISiloIncentivesController} from "silo-core/contracts/incentives/interfaces/ISiloIncentivesController.sol";
-import {
-    IPermissionedLiquidationControllerFactory
-} from "silo-core/contracts/interfaces/IPermissionedLiquidationControllerFactory.sol";
-
 import {SiloConfig} from "silo-core/contracts/SiloConfig.sol";
 import {CloneDeterministic} from "silo-core/contracts/lib/CloneDeterministic.sol";
 import {Views} from "silo-core/contracts/lib/Views.sol";
@@ -40,7 +36,6 @@ contract SiloDeployer is Create2Factory, ISiloDeployer, IVersioned {
     IDynamicKinkModelFactory public immutable DYNAMIC_KINK_MODEL_FACTORY;
     ISiloFactory public immutable SILO_FACTORY;
     ISiloIncentivesControllerFactory public immutable SILO_INCENTIVES_CONTROLLER_FACTORY;
-    IPermissionedLiquidationControllerFactory public immutable PERMISSIONED_LIQUIDATION_CONTROLLER_FACTORY;
     address public immutable SILO_IMPL;
     address public immutable SHARE_PROTECTED_COLLATERAL_TOKEN_IMPL;
     address public immutable SHARE_DEBT_TOKEN_IMPL;
@@ -54,7 +49,6 @@ contract SiloDeployer is Create2Factory, ISiloDeployer, IVersioned {
         IDynamicKinkModelFactory _dynamicKinkModelFactory,
         ISiloFactory _siloFactory,
         ISiloIncentivesControllerFactory _siloIncentivesControllerFactory,
-        IPermissionedLiquidationControllerFactory _permissionedLiquidationControllerFactory,
         address _siloImpl,
         address _shareProtectedCollateralTokenImpl,
         address _shareDebtTokenImpl
@@ -63,7 +57,6 @@ contract SiloDeployer is Create2Factory, ISiloDeployer, IVersioned {
         DYNAMIC_KINK_MODEL_FACTORY = _dynamicKinkModelFactory;
         SILO_FACTORY = _siloFactory;
         SILO_INCENTIVES_CONTROLLER_FACTORY = _siloIncentivesControllerFactory;
-        PERMISSIONED_LIQUIDATION_CONTROLLER_FACTORY = _permissionedLiquidationControllerFactory;
         SILO_IMPL = _siloImpl;
         SHARE_PROTECTED_COLLATERAL_TOKEN_IMPL = _shareProtectedCollateralTokenImpl;
         SHARE_DEBT_TOKEN_IMPL = _shareDebtTokenImpl;

@@ -30,10 +30,10 @@ import {SiloImplementationDeploy} from "./SiloImplementationDeploy.s.sol";
     Resume verification:
     FOUNDRY_PROFILE=core \
         forge script silo-core/deploy/SiloDeployerDeploy.s.sol \
-        --ffi --rpc-url $RPC_INJECTIVE \
+        --ffi --rpc-url $RPC_AVALANCHE \
         --verify \
         --verifier blockscout \
-        --verifier-url $VERIFIER_URL_INJECTIVE \
+        --verifier-url $VERIFIER_URL_SNOWSCAN \
         --private-key $PRIVATE_KEY \
         --resume
 

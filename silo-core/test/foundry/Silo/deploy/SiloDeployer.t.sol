@@ -9,9 +9,6 @@ import {ISiloFactory} from "silo-core/contracts/interfaces/ISiloFactory.sol";
 import {
     ISiloIncentivesControllerFactory
 } from "silo-core/contracts/incentives/interfaces/ISiloIncentivesControllerFactory.sol";
-import {
-    IPermissionedLiquidationControllerFactory
-} from "silo-core/contracts/interfaces/IPermissionedLiquidationControllerFactory.sol";
 import {SiloDeployer} from "silo-core/contracts/SiloDeployer.sol";
 
 contract SiloDeployerMock is SiloDeployer {
@@ -21,7 +18,6 @@ contract SiloDeployerMock is SiloDeployer {
             IDynamicKinkModelFactory(address(0)),
             ISiloFactory(address(0)),
             ISiloIncentivesControllerFactory(address(0)),
-            IPermissionedLiquidationControllerFactory(address(0)),
             address(0),
             address(0),
             address(0)

@@ -79,7 +79,7 @@ contract SiloVaultZeroDayExploit is Test {
         FlowCapsConfig[] memory configs = new FlowCapsConfig[](1);
         configs[0] = FlowCapsConfig({
             market: IERC4626(address(targetMarket)),
-            caps: FlowCaps({maxIn: type(uint128).max, maxOut: 10_000 * 1e6})
+            caps: FlowCaps({maxIn: type(uint127).max, maxOut: 10_000 * 1e6})
         });
         allocator.setFlowCaps(ISiloVault(address(vault)), configs);
 

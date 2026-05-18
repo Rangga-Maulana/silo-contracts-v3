@@ -56,7 +56,7 @@ contract SiloVaultZeroDayExploit is Test {
         vm.mockCall(mockIncentives, abi.encodeWithSignature("getAllIncentivesClaimingLogics()"), abi.encode(new address[](0)));
 
         // DEPLOY KONTRAK SILOVAULT ASLI
-        vault = new SiloVault(admin, 0, IVaultIncentivesModule(mockIncentives), address(usdc), "Silo Vault", "sUSDC");
+        vault = new SiloVault(admin, 86400, IVaultIncentivesModule(mockIncentives), address(usdc), "Silo Vault", "sUSDC");
 
         // DEPLOY KONTRAK ALLOCATOR ASLI
         allocator = new PublicAllocator();

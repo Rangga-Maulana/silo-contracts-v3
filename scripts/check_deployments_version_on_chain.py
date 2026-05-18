@@ -22,7 +22,13 @@ import os
 import re
 import sys
 from pathlib import Path
-from rpc_multicall import format_rpc_error, multicall_eth_calls, rpc_preflight, rpc_request
+from rpc_multicall import (
+    format_rpc_error,
+    multicall_eth_calls,
+    resolve_primary_rpc_url,
+    rpc_preflight,
+    rpc_request,
+)
 from typing import Any
 
 # getVersions(address[]) selector
@@ -236,15 +242,23 @@ def get_silo_lens_address(repo_root: Path, chain: str) -> str | None:
     return None
 
 
-def _eth_call(rpc_url: str, to: str, data: str) -> str | None:
-    result, _ = _eth_call_with_error(rpc_url, to, data)
+def _eth_call(rpc_url: str, to: str, data: str, chain: str | None = None) -> str | None:
+    result, _ = _eth_call_with_error(rpc_url, to, data, chain=chain)
     return result
 
 
-def _eth_call_with_error(rpc_url: str, to: str, data: str) -> tuple[str | None, str | None]:
+def _eth_call_with_error(
+    rpc_url: str, to: str, data: str, *, chain: str | None = None
+) -> tuple[str | None, str | None]:
     """Like _eth_call but returns (result, error_message). error_message is set when RPC returns error."""
     to = to if to.startswith("0x") else "0x" + to
-    body, req_err = rpc_request(rpc_url, "eth_call", [{"to": to, "data": data}, "latest"], timeout=45)
+    body, req_err = rpc_request(
+        rpc_url,
+        "eth_call",
+        [{"to": to, "data": data}, "latest"],
+        timeout=45,
+        chain=chain,
+    )
     if req_err:
         return None, req_err
     if body is None:
@@ -351,7 +365,7 @@ def abi_has_zero_arg_function(abi: list[dict] | None, function_name: str) -> boo
 
 
 def get_versions_on_chain(
-    rpc_url: str, lens_address: str, addresses: list[str], *, verbose: bool = False
+    rpc_url: str, lens_address: str, addresses: list[str], *, chain: str | None = None, verbose: bool = False
 ) -> list[str | None]:
     """Call SiloLens.getVersions(addresses), return list of decoded strings (same order as addresses)."""
     if not addresses:
@@ -360,7 +374,7 @@ def get_versions_on_chain(
     if verbose:
         print(f"[verbose] getVersions: lens={lens_address} addresses={len(addresses)}", file=sys.stderr)
         print(f"[verbose] first 2 addrs: {addresses[:2]}", file=sys.stderr)
-        result, err = _eth_call_with_error(rpc_url, lens_address, data)
+        result, err = _eth_call_with_error(rpc_url, lens_address, data, chain=chain)
         if err:
             print(f"[verbose] RPC error: {err}", file=sys.stderr)
         print(f"[verbose] result: len={len(result) if result else 0}", file=sys.stderr)
@@ -368,7 +382,7 @@ def get_versions_on_chain(
             cap = 1500
             print(f"[verbose] raw hex (first {min(cap, len(result))} chars): {result[:cap]}", file=sys.stderr)
     else:
-        result = _eth_call(rpc_url, lens_address, data)
+        result = _eth_call(rpc_url, lens_address, data, chain=chain)
     if result is None:
         if not verbose:
             print("getVersions failed (RPC error or revert). Run with --verbose for details.", file=sys.stderr)
@@ -389,17 +403,19 @@ def get_versions_on_chain(
     return [v if v is not None and v != "" else "legacy" for v in decoded]
 
 
-def call_factory_irm(rpc_url: str, factory_address: str) -> str | None:
+def call_factory_irm(rpc_url: str, factory_address: str, *, chain: str | None = None) -> str | None:
     """Call DynamicKinkModelFactory.IRM(), return implementation address (DynamicKinkModel) or None."""
-    result = _eth_call(rpc_url, factory_address, IRM_SELECTOR)
+    result = _eth_call(rpc_url, factory_address, IRM_SELECTOR, chain=chain)
     if not result or len(result) < 64:
         return None
     h = result[2:] if result.startswith("0x") else result
     return "0x" + h[-40:].lower()
 
 
-def call_zero_arg_address_getter(rpc_url: str, contract_address: str, selector: str) -> str | None:
-    result = _eth_call(rpc_url, contract_address, selector)
+def call_zero_arg_address_getter(
+    rpc_url: str, contract_address: str, selector: str, *, chain: str | None = None
+) -> str | None:
+    result = _eth_call(rpc_url, contract_address, selector, chain=chain)
     if not result or len(result) < 64:
         return None
     h = result[2:] if result.startswith("0x") else result
@@ -444,7 +460,8 @@ def main() -> int:
             return 2
 
     rpc_env = CHAIN_TO_RPC_ENV.get(chain)
-    rpc_url = args.rpc_url or (os.environ.get(rpc_env) if rpc_env else None)
+    env_rpc_url = (os.environ.get(rpc_env) or "").strip() if rpc_env else None
+    rpc_url = resolve_primary_rpc_url(chain, args.rpc_url or env_rpc_url)
     if not args.dry_run and not rpc_url:
         hint = rpc_env or f"RPC_<chain>"
         print(f"RPC URL not set. Use --rpc-url or set env {hint}", file=sys.stderr)
@@ -462,7 +479,7 @@ def main() -> int:
             )
         return 2
     if not args.dry_run:
-        preflight_err = rpc_preflight(rpc_url, timeout=20)
+        preflight_err = rpc_preflight(rpc_url, timeout=20, chain=chain)
         if preflight_err:
             print(f"RPC preflight failed: {preflight_err}", file=sys.stderr)
             if args.output_json_file:
@@ -594,7 +611,12 @@ def main() -> int:
     display_name_override: dict[tuple[str, str], str] = {}
     if not args.dry_run and ("vaults", "SiloVaultsFactory") in deployments_by_key and ("vaults", "SiloVaultDeployer") in deployments_by_key:
         vault_deployer_addr = deployments_by_key[("vaults", "SiloVaultDeployer")]
-        factory_from_deployer = call_zero_arg_address_getter(rpc_url, vault_deployer_addr, SILO_VAULTS_FACTORY_SELECTOR)
+        factory_from_deployer = call_zero_arg_address_getter(
+            rpc_url,
+            vault_deployer_addr,
+            SILO_VAULTS_FACTORY_SELECTOR,
+            chain=chain,
+        )
         factory_deployed_addr = deployments_by_key[("vaults", "SiloVaultsFactory")]
         if factory_from_deployer and factory_from_deployer.lower() == factory_deployed_addr.lower():
             display_name_override[("vaults", "SiloVaultsFactory")] = "SiloVaultsFactory (via SiloVaultDeployer)"
@@ -656,7 +678,13 @@ def main() -> int:
             if addr:
                 addresses.append(addr)
         if addresses:
-            on_chain_list = get_versions_on_chain(rpc_url, silo_lens, addresses, verbose=args.verbose)
+            on_chain_list = get_versions_on_chain(
+                rpc_url,
+                silo_lens,
+                addresses,
+                chain=chain,
+                verbose=args.verbose,
+            )
             n_versioned = len(key_addr_pairs)
             versions_for_versioned = on_chain_list[:n_versioned]
             for (key, _), version in zip(key_addr_pairs, versions_for_versioned):

@@ -32,7 +32,13 @@ import os
 import sys
 from pathlib import Path
 from typing import Any
-from rpc_multicall import format_rpc_error, multicall_eth_calls, rpc_batch_request, rpc_preflight
+from rpc_multicall import (
+    format_rpc_error,
+    multicall_eth_calls,
+    resolve_primary_rpc_url,
+    rpc_batch_request,
+    rpc_preflight,
+)
 
 # owner() selector: first 4 bytes of keccak256("owner()")
 OWNER_SELECTOR = "0x8da5cb5b"
@@ -249,7 +255,7 @@ def _extract_address_from_32byte_hex(value: str | None) -> str | None:
     return addr
 
 
-def detect_proxy_info(rpc_url: str, contract_address: str) -> tuple[bool, str]:
+def detect_proxy_info(chain: str, rpc_url: str, contract_address: str) -> tuple[bool, str]:
     """
     Probe proxy-related storage slots (EIP-1967).
     Returns (is_proxy, details_string).
@@ -260,7 +266,7 @@ def detect_proxy_info(rpc_url: str, contract_address: str) -> tuple[bool, str]:
         (2, "eth_getStorageAt", [addr, EIP1967_ADMIN_SLOT, "latest"]),
         (3, "eth_getStorageAt", [addr, EIP1967_BEACON_SLOT, "latest"]),
     ]
-    by_id, err = rpc_batch_request(rpc_url, calls, timeout=45)
+    by_id, err = rpc_batch_request(rpc_url, calls, timeout=45, chain=chain)
     if err:
         return False, f"proxy_probe_failed ({err})"
     impl_body = by_id.get(1)
@@ -348,7 +354,8 @@ def main() -> int:
     addr_to_key: dict[str, str] = {addr: key for key, addr in common_addresses.items()}
 
     rpc_env = CHAIN_TO_RPC_ENV.get(chain)
-    rpc_url = args.rpc_url or (os.environ.get(rpc_env) if rpc_env else None)
+    env_rpc_url = (os.environ.get(rpc_env) or "").strip() if rpc_env else None
+    rpc_url = resolve_primary_rpc_url(chain, args.rpc_url or env_rpc_url)
     if not args.dry_run and not rpc_url:
         hint = rpc_env or f"RPC_<chain> (add {chain!r} to CHAIN_TO_RPC_ENV)"
         print(f"RPC URL not set. Use --rpc-url or set env {hint}", file=sys.stderr)
@@ -367,7 +374,7 @@ def main() -> int:
             )
         return 2
     if not args.dry_run:
-        preflight_err = rpc_preflight(rpc_url, timeout=20)
+        preflight_err = rpc_preflight(rpc_url, timeout=20, chain=chain)
         if preflight_err:
             print(f"RPC preflight failed: {preflight_err}", file=sys.stderr)
             if args.output_json_file:
@@ -484,7 +491,7 @@ def main() -> int:
         if owner is None:
             is_silo_hook = contract_name.startswith("SiloHook")
             if owner_err == "owner_is_zero_address" and is_silo_hook:
-                is_proxy, proxy_details = detect_proxy_info(rpc_url, address)
+                is_proxy, proxy_details = detect_proxy_info(chain, rpc_url, address)
                 if not is_proxy:
                     print(
                         f"[ ok ] {component} {contract_name} owner is zero (allowed for non-proxy SiloHook implementation)"

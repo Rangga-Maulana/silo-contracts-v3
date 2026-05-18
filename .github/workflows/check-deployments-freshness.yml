@@ -99,6 +99,40 @@ jobs:
         if: steps.changed.outputs.has_changes != 'true'
         run: echo "No changed deployments for ${{ matrix.chain }}."
 
+      - name: Resolve deployment freshness max age
+        if: steps.changed.outputs.has_changes == 'true'
+        id: max-age
+        env:
+          PR_BODY: ${{ github.event.pull_request.body || '' }}
+          DEFAULT_MAX_AGE_DAYS: ${{ env.DEPLOYMENT_FRESHNESS_MAX_AGE_DAYS }}
+        run: |
+          python3 - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          pr_body = os.environ.get("PR_BODY", "")
+          default_days = os.environ["DEFAULT_MAX_AGE_DAYS"]
+          output_path = Path(os.environ["GITHUB_OUTPUT"])
+
+          # Example override in PR description: DEPLOYMENT_DAYS_AGO=7
+          pattern = re.compile(r"^\s*DEPLOYMENT_DAYS_AGO\s*=\s*([0-9]+(?:\.[0-9]+)?)\s*$", re.IGNORECASE | re.MULTILINE)
+          match = pattern.search(pr_body)
+          if match:
+              value = match.group(1)
+              if float(value) <= 0:
+                  raise ValueError("DEPLOYMENT_DAYS_AGO must be greater than 0.")
+              chosen = value
+              source = "pr_body"
+          else:
+              chosen = default_days
+              source = "default"
+
+          print(f"Using deployment freshness max age: {chosen} days (source={source})")
+          with output_path.open("a", encoding="utf-8") as f:
+              f.write(f"max_age_days={chosen}\n")
+          PY
+
       - name: Deploy freshness vs run-latest (${{ matrix.chain }})
         if: steps.changed.outputs.has_changes == 'true'
         env:
@@ -119,7 +153,7 @@ jobs:
               "--chain",
               chain,
               "--max-age-days",
-              os.environ["DEPLOYMENT_FRESHNESS_MAX_AGE_DAYS"],
+              "${{ steps.max-age.outputs.max_age_days }}",
           ]
           for f in files:
               cmd.extend(["--deployment-file", f])

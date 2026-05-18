@@ -34,6 +34,8 @@ import {RenounceRoleReentrancyTest} from "../methods/leverage/RenounceRoleReentr
 import {RevokeRoleReentrancyTest} from "../methods/leverage/RevokeRoleReentrancyTest.sol";
 import {SupportsInterfaceReentrancyTest} from "../methods/leverage/SupportsInterfaceReentrancyTest.sol";
 
+import {VersionReentrancyTest} from "../methods/silo-hook-v2/VersionReentrancyTest.sol";
+
 contract SiloHookV1MethodsRegistry is IMethodsRegistry {
     mapping(bytes4 methodSig => IMethodReentrancyTest) public methods;
     bytes4[] public supportedMethods;
@@ -67,6 +69,8 @@ contract SiloHookV1MethodsRegistry is IMethodsRegistry {
         _registerMethod(new RenounceRoleReentrancyTest());
         _registerMethod(new RevokeRoleReentrancyTest());
         _registerMethod(new SupportsInterfaceReentrancyTest());
+
+        _registerMethod(new VersionReentrancyTest());
     }
 
     function supportedMethodsLength() external view returns (uint256) {

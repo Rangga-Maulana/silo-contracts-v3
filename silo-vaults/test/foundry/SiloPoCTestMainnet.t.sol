@@ -18,7 +18,7 @@ interface ISiloVault is IERC4626 {
 
 contract SiloXDCForkTest is Test {
     // RPC XinFin (XDC)
-    string XDC_RPC_URL = "https://xdc-mainnet.gateway.tatum.io/"; 
+    string XDC_RPC_URL = "https://erpc.xinfin.network/"; 
     
     // Alamat-alamat di XinFin (XDC)
     address constant USDC = 0xfA2958CB79b0491CC627c1557F441eF849Ca8eb1;

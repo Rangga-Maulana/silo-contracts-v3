@@ -18,7 +18,7 @@ interface ISiloVault is IERC4626 {
 
 contract SiloXDCForkTest is Test {
     // RPC XinFin (XDC)
-    string XDC_RPC_URL = "https://xdc-mainnet.gateway.tatum.io"; 
+    string XDC_RPC_URL = "https://xdc-mainnet.gateway.tatum.io/"; 
     
     // Alamat-alamat di XinFin (XDC)
     address constant USDC = 0xfA2958CB79b0491CC627c1557F441eF849Ca8eb1;
@@ -26,7 +26,7 @@ contract SiloXDCForkTest is Test {
     address constant EXTERNAL_MARKET = 0xB38658B163E364DfFFDBC895f1b5d658d5e6C439; // Unverified Market
     
     // TUGAS ANDA: Ganti dengan address pengirim (msg.sender) dari transaksi reallocate yang Anda temukan
-    address constant ALLOCATOR = 0x1234567890123456789012345678901234567890; 
+    address constant ALLOCATOR = 0x8e65743e23Ed13f593E7d4eb7ED3ddE1E1cB9bBf; 
 
     function setUp() public {
         // Fork jaringan XDC

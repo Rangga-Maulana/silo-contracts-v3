@@ -3,8 +3,8 @@ pragma solidity ^0.8.20;
 
 import "forge-std/Test.sol";
 import "forge-std/console.sol";
-import "openzeppelin-contracts/token/ERC20/IERC20.sol";
-import "openzeppelin-contracts/interfaces/IERC4626.sol";
+import {IERC20} from "openzeppelin5/token/ERC20/IERC20.sol";
+import {IERC4626} from "openzeppelin5/interfaces/IERC4626.sol";
 
 // Interface untuk SiloVault
 interface ISiloVault is IERC4626 {

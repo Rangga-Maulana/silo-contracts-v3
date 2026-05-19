@@ -22,7 +22,7 @@ contract SiloXDCForkTest is Test {
     
     // Alamat-alamat di XinFin (XDC)
     address constant USDC = 0xfA2958CB79b0491CC627c1557F441eF849Ca8eb1;
-    address constant SILO_VAULT = 0x06083db34f1e915fa5cd4e2a198f3680e3ce9c60; // 9Summits Vault
+    address constant SILO_VAULT = 0x06083Db34F1E915FA5cd4e2A198f3680E3CE9c60; // 9Summits Vault
     address constant EXTERNAL_MARKET = 0xB38658B163E364DfFFDBC895f1b5d658d5e6C439; // Unverified Market
     
     // TUGAS ANDA: Ganti dengan address pengirim (msg.sender) dari transaksi reallocate yang Anda temukan

